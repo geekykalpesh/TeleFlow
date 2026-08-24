@@ -20,7 +20,7 @@
     "sequential",
     "media-saver"
   ],
-  "author": "TeleFlow Team",
+  "author": "TeleFlow Team <geekykalpesh@gmail.com>",
   "license": "MIT",
   "dependencies": {
     "big-integer": "^1.6.52",
@@ -78,7 +78,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "TeleFlow Team <geekykalpesh@gmail.com>"
     }
   }
 }
