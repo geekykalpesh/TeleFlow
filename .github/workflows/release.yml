@@ -41,8 +41,44 @@ jobs:
       - name: Compile & Build Frontend
         run: npm run build
 
-      - name: Build & Publish Electron Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --publish always --config.npmRebuild=false
+      - name: Build Electron Executables
+        run: npx electron-builder --config.npmRebuild=false
 
+      - name: Publish Release to GitHub
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "TeleFlow v1.0.0 — Official Multi-Platform Release"
+          body: |
+            ## 🚀 TeleFlow v1.0.0 Official Release
+
+            **TeleFlow** is a production-ready desktop Telegram client & sequential media downloader engineered for deterministic ordering, channel auto-syncing, and isolated transfer dashboards.
+
+            ---
+
+            ### ✨ Highlights & Key Features
+
+            - **⚡ Deterministic Sequential Downloader**: Prefixes files with ordered sequence numbers (`001_`, `002_`) preserving Telegram channel message chronology.
+            - **📡 Per-Channel Dashboard Isolation**: Dedicated UI card for every channel with real-time download speeds (`MB/s`), remaining ETAs, and byte progress bars.
+            - **🔁 60-Second Auto-Sync & Manual Sync**: Automatic background scanning for newly posted channel media + instant `Sync Channel` & `Sync All` buttons.
+            - **📄 Infinite Auto-Scan & Bottom Pagination**: Automatically streams full channel history into memory with bottom page jump controls (`25 | 50 | 100 | 250 | All`).
+            - **⏸️ Granular Pause / Resume / Retry**: Instant transfer abortion with byte-offset resumption from existing `.part` files.
+            - **📂 Custom Output Directories**: Route downloads into custom channel output folders or global default paths.
+
+            ---
+
+            ### 📦 Download Assets
+
+            - 🪟 **Windows**: `TeleFlow Setup 1.0.0.exe` (NSIS Installer) & `TeleFlow 1.0.0.exe` (Portable)
+            - 🍎 **macOS**: `TeleFlow-1.0.0.dmg` & `TeleFlow-1.0.0-mac.zip`
+            - 🐧 **Linux**: `TeleFlow-1.0.0.AppImage` & `teleflow_1.0.0_amd64.deb`
+          files: |
+            release/1.0.0/*.exe
+            release/1.0.0/*.dmg
+            release/1.0.0/*.zip
+            release/1.0.0/*.AppImage
+            release/1.0.0/*.deb
+            release/1.0.0/*.blockmap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
