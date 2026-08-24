@@ -10,7 +10,7 @@ export class DownloadManager {
   private activeDownloads: Map<string, { startTime: number; lastDownloaded: number }> = new Map();
   private isProcessing: boolean = false;
   private isPaused: boolean = false;
-  private currentConcurrency: number = 3;
+  private currentConcurrency: number = 5;
   private mainWindow: BrowserWindow | null = null;
 
   public setMainWindow(win: BrowserWindow | null): void {
@@ -18,7 +18,7 @@ export class DownloadManager {
   }
 
   public setConcurrency(concurrency: number): void {
-    this.currentConcurrency = Math.max(1, Math.min(10, concurrency));
+    this.currentConcurrency = Math.max(1, Math.min(16, concurrency));
   }
 
   public startQueue(): void {

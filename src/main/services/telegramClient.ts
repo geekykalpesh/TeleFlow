@@ -471,7 +471,7 @@ class TelegramClientService {
       onProgress,
       checkAborted,
       startOffset,
-      8
+      16
     );
   }
 
@@ -481,7 +481,7 @@ class TelegramClientService {
     onProgress: (downloadedBytes: number, totalBytes: number) => void,
     checkAborted: () => void,
     startOffset: number = 0,
-    workers: number = 8
+    workers: number = 16
   ): Promise<void> {
     if (!this.client) throw new Error('Telegram client is not connected.');
     if (!message || !message.media) throw new Error('Message does not contain media.');
