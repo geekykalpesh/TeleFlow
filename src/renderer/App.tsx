@@ -345,7 +345,7 @@ export const App: React.FC = () => {
         <AuthModal
           authStatus={authStatus}
           onClose={() => setShowAuthModal(false)}
-          onRefresh={() => { fetchAuthStatus(); setShowAuthModal(false); }}
+          onRefresh={() => fetchAuthStatus()}
         />
       )}
 

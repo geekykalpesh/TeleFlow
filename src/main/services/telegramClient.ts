@@ -26,18 +26,26 @@ class TelegramClientService {
     return this.authStatus;
   }
 
+  public getCredentials() {
+    return {
+      apiId: dbService.getSetting('api_id', ''),
+      apiHash: dbService.getSetting('api_hash', ''),
+      phoneNumber: dbService.getSetting('phone_number', '')
+    };
+  }
+
   public async init(): Promise<void> {
-    const savedApiId = dbService.getSetting('api_id', '28923');
-    const savedApiHash = dbService.getSetting('api_hash', 'c671dcb553990caaa73');
-    const savedAppTitle = dbService.getSetting('app_title', 'krishnaldrbot');
-    const savedShortName = dbService.getSetting('short_name', 'krishnaebot');
+    const savedApiId = dbService.getSetting('api_id', '');
+    const savedApiHash = dbService.getSetting('api_hash', '');
+    const savedAppTitle = dbService.getSetting('app_title', 'TeleFlow Desktop');
+    const savedShortName = dbService.getSetting('short_name', 'teleflow');
     const savedEnv = dbService.getSetting('server_environment', 'production') as 'production' | 'test';
     const savedSession = dbService.getSetting('session_string', '');
 
-    this.apiId = parseInt(savedApiId, 10) || 28923;
-    this.apiHash = savedApiHash || 'c671dcb553990caaa73';
-    this.appTitle = savedAppTitle || 'krishnaldrbot';
-    this.shortName = savedShortName || 'krishnaebot';
+    this.apiId = parseInt(savedApiId, 10) || 0;
+    this.apiHash = savedApiHash || '';
+    this.appTitle = savedAppTitle;
+    this.shortName = savedShortName;
     this.serverEnvironment = savedEnv;
     this.sessionString = savedSession;
 
@@ -46,6 +54,9 @@ class TelegramClientService {
         const session = new StringSession(this.sessionString);
         this.client = new TelegramClient(session, this.apiId, this.apiHash, {
           connectionRetries: 5,
+          deviceModel: 'TeleFlow Desktop Client',
+          systemVersion: 'Windows 10/11',
+          appVersion: '1.0.0',
           testServers: this.serverEnvironment === 'test'
         });
         await this.client.connect();
@@ -84,7 +95,9 @@ class TelegramClientService {
   }
 
   public async sendCode(phoneNumber: string): Promise<TelegramAuthStatus> {
-    if (!this.apiId || !this.apiHash) throw new Error('API ID and API Hash must be configured first.');
+    if (!this.apiId || !this.apiHash) {
+      throw new Error('API ID and API Hash must be configured first. Get your keys at https://my.telegram.org');
+    }
 
     const cleanPhone = phoneNumber.trim().replace(/[\s\-\(\)]/g, '');
     if (!cleanPhone.startsWith('+')) {
@@ -92,19 +105,32 @@ class TelegramClientService {
     }
 
     this.phoneNumber = cleanPhone;
+    dbService.setSetting('phone_number', cleanPhone);
+
+    if (this.client) {
+      try { await this.client.disconnect(); } catch (e) {}
+      this.client = null;
+    }
+
     const session = new StringSession('');
     this.client = new TelegramClient(session, this.apiId, this.apiHash, {
       connectionRetries: 5,
+      deviceModel: 'TeleFlow Desktop Client',
+      systemVersion: 'Windows 10/11',
+      appVersion: '1.0.0',
       testServers: this.serverEnvironment === 'test'
     });
     await this.client.connect();
 
     try {
+      console.log(`[TelegramAuth] Sending OTP code to ${cleanPhone} with API ID ${this.apiId}...`);
       const res = await this.client.sendCode({ apiId: this.apiId, apiHash: this.apiHash }, cleanPhone);
       this.phoneCodeHash = res.phoneCodeHash;
       this.authStatus = { isAuthenticated: false, step: 'WAITING_CODE' };
+      console.log('[TelegramAuth] OTP code sent successfully! phoneCodeHash received.');
       return this.authStatus;
     } catch (err: any) {
+      console.error('[TelegramAuth] Error sending OTP code:', err);
       const friendlyErr = this.formatTelegramError(err);
       this.authStatus = { isAuthenticated: false, step: 'LOGGED_OUT', error: friendlyErr };
       throw new Error(friendlyErr);
@@ -337,14 +363,50 @@ class TelegramClientService {
 
   }
 
-  public async fetchMessages(chatId: string, fromId?: number, toId?: number, limit: number = 200) {
+  public async getMessagesByIds(chatId: string, ids: number[]) {
     if (!this.client) throw new Error('Telegram client is not connected.');
     const entity = await this.client.getEntity(chatId);
-    return this.client.getMessages(entity, {
-      limit,
-      minId: fromId ? fromId - 1 : undefined,
-      maxId: toId ? toId + 1 : undefined
-    });
+    return this.client.getMessages(entity, { ids });
+  }
+
+  public async fetchMessages(chatId: string, fromId?: number, toId?: number, limit: number = 0) {
+    if (!this.client) throw new Error('Telegram client is not connected.');
+    const entity = await this.client.getEntity(chatId);
+
+    // Single batch fetch for explicit small preview limits
+    if (limit > 0 && limit <= 500) {
+      return this.client.getMessages(entity, {
+        limit,
+        minId: fromId ? fromId - 1 : undefined,
+        maxId: toId ? toId + 1 : undefined
+      });
+    }
+
+    // Full channel / range history fetch (limit === 0)
+    const allMessages: any[] = [];
+    let currentOffsetId: number | undefined = toId ? toId + 1 : undefined;
+    const minId = fromId ? fromId - 1 : undefined;
+
+    while (true) {
+      const batch = await this.client.getMessages(entity, {
+        limit: 100,
+        minId: minId,
+        maxId: currentOffsetId
+      });
+
+      if (!batch || batch.length === 0) break;
+
+      allMessages.push(...batch);
+
+      const oldestInBatch = Math.min(...batch.map((m: any) => m.id));
+
+      if (minId && oldestInBatch <= minId) break;
+      if (batch.length < 100) break;
+
+      currentOffsetId = oldestInBatch;
+    }
+
+    return allMessages;
   }
 
   public isDownloadAborted(itemId: string): boolean {
@@ -403,13 +465,80 @@ class TelegramClientService {
 
     checkAborted();
 
-    await this.client.downloadMedia(message as any, {
+    await this.downloadMediaTurbo(
+      message,
+      targetTempPath,
+      onProgress,
+      checkAborted,
+      startOffset,
+      8
+    );
+  }
+
+  public async downloadMediaTurbo(
+    message: any,
+    targetTempPath: string,
+    onProgress: (downloadedBytes: number, totalBytes: number) => void,
+    checkAborted: () => void,
+    startOffset: number = 0,
+    workers: number = 8
+  ): Promise<void> {
+    if (!this.client) throw new Error('Telegram client is not connected.');
+    if (!message || !message.media) throw new Error('Message does not contain media.');
+
+    const media = message.media;
+    let location: any = null;
+    let dcId: number | undefined = undefined;
+    let fileSize: number = 0;
+
+    if (media.document && media.document.id) {
+      const doc = media.document;
+      dcId = doc.dcId;
+      fileSize = Number(doc.size || 0);
+      location = new Api.InputDocumentFileLocation({
+        id: doc.id,
+        accessHash: doc.accessHash,
+        fileReference: doc.fileReference,
+        thumbSize: ''
+      });
+    } else if (media.photo && media.photo.id) {
+      const photo = media.photo;
+      dcId = photo.dcId;
+      const largestSize = photo.sizes ? photo.sizes[photo.sizes.length - 1] : null;
+      fileSize = Number(largestSize?.size || 0);
+      location = new Api.InputPhotoFileLocation({
+        id: photo.id,
+        accessHash: photo.accessHash,
+        fileReference: photo.fileReference,
+        thumbSize: largestSize?.type || 'x'
+      });
+    }
+
+    if (!location) {
+      // Fallback to standard downloadMedia if custom location could not be derived
+      await this.client.downloadMedia(message as any, {
+        outputFile: targetTempPath,
+        progressCallback: (downloaded: any, total: any) => {
+          checkAborted();
+          onProgress(Number(downloaded) + startOffset, Number(total));
+        }
+      });
+      return;
+    }
+
+    // HIGH-SPEED PARALLEL MULTI-WORKER DOWNLOAD ENGINE
+    await (this.client as any).downloadFile(location, {
+      dcId,
+      fileSize: fileSize ? (fileSize as any) : undefined,
+      workers: workers,      // 8 parallel MTProto TCP connections
+      partSizeKb: 512,       // Max 512 KB per request chunk (8x payload boost)
+      start: startOffset,    // Resume from existing byte offset
       outputFile: targetTempPath,
       progressCallback: (downloaded: any, total: any) => {
         checkAborted();
         onProgress(Number(downloaded) + startOffset, Number(total));
       }
-    });
+    } as any);
   }
 }
 

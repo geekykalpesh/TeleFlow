@@ -10,16 +10,40 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRefresh }) => {
-  const [apiId, setApiId] = useState('28923');
-  const [apiHash, setApiHash] = useState('c671dcb553990caaa73');
-  const [phoneNumber, setPhoneNumber] = useState('+9197987749794');
+  const [apiId, setApiId] = useState('');
+  const [apiHash, setApiHash] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
+
+  // Load saved credentials on modal mount
+  React.useEffect(() => {
+    try {
+      const api = (window as any).electronAPI;
+      if (api && api.getCredentials) {
+        api.getCredentials().then((creds: any) => {
+          if (creds) {
+            if (creds.apiId && creds.apiId !== '0') setApiId(String(creds.apiId));
+            if (creds.apiHash) setApiHash(creds.apiHash);
+            if (creds.phoneNumber) setPhoneNumber(creds.phoneNumber);
+          }
+        });
+      }
+    } catch (e) {}
+  }, []);
 
   // Internal step manager for instantaneous UI transitions
   const [currentStep, setCurrentStep] = useState<'LOGGED_OUT' | 'WAITING_PHONE' | 'WAITING_CODE' | 'WAITING_PASSWORD' | 'LOGGED_IN'>(
     authStatus.isAuthenticated ? 'LOGGED_IN' : authStatus.step || 'LOGGED_OUT'
   );
+
+  React.useEffect(() => {
+    if (authStatus.isAuthenticated) {
+      setCurrentStep('LOGGED_IN');
+    } else if (authStatus.step && authStatus.step !== 'LOGGED_OUT') {
+      setCurrentStep(authStatus.step);
+    }
+  }, [authStatus]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(authStatus.error || null);
@@ -73,8 +97,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
     try {
       const api = getApi();
       const status = await api.signIn(code.trim());
-      if (status && status.step) {
-        setCurrentStep(status.step);
+      if (status) {
+        if (status.isAuthenticated || status.step === 'LOGGED_IN') {
+          setCurrentStep('LOGGED_IN');
+          onRefresh();
+          setTimeout(() => onClose(), 1200);
+          return;
+        } else if (status.step) {
+          setCurrentStep(status.step);
+        }
       }
       onRefresh();
     } catch (err: any) {
@@ -95,8 +126,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
     try {
       const api = getApi();
       const status = await api.checkPassword(password);
-      if (status && status.step) {
-        setCurrentStep(status.step);
+      if (status) {
+        if (status.isAuthenticated || status.step === 'LOGGED_IN') {
+          setCurrentStep('LOGGED_IN');
+          onRefresh();
+          setTimeout(() => onClose(), 1200);
+          return;
+        } else if (status.step) {
+          setCurrentStep(status.step);
+        }
       }
       onRefresh();
     } catch (err: any) {

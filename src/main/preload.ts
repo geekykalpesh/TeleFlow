@@ -4,6 +4,7 @@ import { ScanOptions } from '../types';
 contextBridge.exposeInMainWorld('electronAPI', {
   // Auth
   getAuthStatus: () => ipcRenderer.invoke('auth:get-status'),
+  getCredentials: () => ipcRenderer.invoke('auth:get-credentials'),
   configureCredentials: (apiId: number, apiHash: string, appTitle?: string, shortName?: string, serverEnvironment?: 'production' | 'test') =>
     ipcRenderer.invoke('auth:configure', { apiId, apiHash, appTitle, shortName, serverEnvironment }),
   sendAuthCode: (phone: string) => ipcRenderer.invoke('auth:send-code', phone),

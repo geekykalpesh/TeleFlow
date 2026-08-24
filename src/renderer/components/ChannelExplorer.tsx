@@ -326,23 +326,23 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
           <div className="glass-panel" style={{ padding: '12px 16px' }}>
             <button onClick={() => setShowAdvanced(!showAdvanced)}
               style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
-              <Settings2 size={14} /> Advanced Options {showAdvanced ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              <Settings2 size={14} /> Message Range & Link Options {showAdvanced ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
             </button>
             {showAdvanced && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginTop: '12px' }}>
                 {[
-                  { label: 'From Message ID', val: fromMsgId, set: setFromMsgId, ph: 'e.g. 500' },
-                  { label: 'To Message ID', val: toMsgId, set: setToMsgId, ph: 'e.g. 2000' },
+                  { label: 'From Link / Message ID', val: fromMsgId, set: setFromMsgId, ph: 'e.g. https://t.me/c/3429930878/642 or 642' },
+                  { label: 'To Link / Message ID', val: toMsgId, set: setToMsgId, ph: 'e.g. https://t.me/c/3429930878/750 or 750' },
                 ].map((f, i) => (
                   <div key={i}>
                     <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>{f.label}</label>
-                    <input type="number" placeholder={f.ph} value={f.val} onChange={e => f.set(e.target.value)}
+                    <input type="text" placeholder={f.ph} value={f.val} onChange={e => f.set(e.target.value)}
                       style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '6px 10px', color: '#fff', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                 ))}
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                    Leave empty to load all messages.<br />First 100 loaded, click "Load More" for rest.
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <p style={{ fontSize: '0.72rem', color: '#38bdf8', lineHeight: '1.4' }}>
+                    💡 Paste Telegram post links (e.g. https://t.me/c/3429930878/642) or message IDs to sync exact message ranges.
                   </p>
                 </div>
               </div>

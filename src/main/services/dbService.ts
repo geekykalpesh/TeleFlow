@@ -9,22 +9,36 @@ class DbService {
   private dbPath: string = '';
 
   public async init(): Promise<void> {
-    const userDataPath = app ? app.getPath('userData') : process.cwd();
+    const userDataPath = app ? app.getPath('userData') : path.join(process.cwd(), '.teleflow_data');
     const dbFolder = path.join(userDataPath, 'database');
     if (!fs.existsSync(dbFolder)) {
       fs.mkdirSync(dbFolder, { recursive: true });
     }
     this.dbPath = path.join(dbFolder, 'downloads.db');
 
-    const wasmPath = path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
-    const SQL = await initSqlJs({
-      locateFile: file => {
-        if (file.endsWith('.wasm') && fs.existsSync(wasmPath)) {
-          return wasmPath;
-        }
-        return file;
+    const candidateWasmPaths = [
+      path.join(__dirname, 'sql-wasm.wasm'),
+      path.join(__dirname, '../dist-electron/sql-wasm.wasm'),
+      path.join(app ? app.getAppPath() : process.cwd(), 'dist-electron', 'sql-wasm.wasm'),
+      path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm')
+    ];
+
+    let wasmPath = '';
+    for (const p of candidateWasmPaths) {
+      if (fs.existsSync(p)) {
+        wasmPath = p;
+        break;
       }
-    });
+    }
+
+    let SQL: any;
+    if (wasmPath) {
+      const wasmBuffer = fs.readFileSync(wasmPath);
+      const wasmBinary = wasmBuffer.buffer.slice(wasmBuffer.byteOffset, wasmBuffer.byteOffset + wasmBuffer.byteLength);
+      SQL = await initSqlJs({ wasmBinary });
+    } else {
+      SQL = await initSqlJs();
+    }
 
     if (fs.existsSync(this.dbPath)) {
       const filebuffer = fs.readFileSync(this.dbPath);

@@ -11,11 +11,15 @@ import { fileOrganizer } from './services/fileOrganizer';
 process.on('uncaughtException', (err) => { console.error('Uncaught Exception in Main Process:', err); });
 process.on('unhandledRejection', (reason) => { console.error('Unhandled Rejection in Main Process:', reason); });
 
-// Redirect user data and session cache to local folder
-const customDataPath = path.join(process.cwd(), '.teleflow_data');
-if (!fs.existsSync(customDataPath)) { fs.mkdirSync(customDataPath, { recursive: true }); }
-app.setPath('userData', customDataPath);
-app.setPath('sessionData', customDataPath);
+// Redirect user data in dev mode only
+if (!app.isPackaged) {
+  try {
+    const customDataPath = path.join(process.cwd(), '.teleflow_data');
+    if (!fs.existsSync(customDataPath)) { fs.mkdirSync(customDataPath, { recursive: true }); }
+    app.setPath('userData', customDataPath);
+    app.setPath('sessionData', customDataPath);
+  } catch (e) {}
+}
 
 // Disable hardware acceleration to prevent GPU cache permission errors on Windows
 app.disableHardwareAcceleration();
@@ -26,12 +30,15 @@ app.commandLine.appendSwitch('disable-http-cache');
 let mainWindow: BrowserWindow | null = null;
 
 // --- Window state persistence ---
-const windowStatePath = path.join(customDataPath, 'window-state.json');
+function getWindowStatePath(): string {
+  return path.join(app.getPath('userData'), 'window-state.json');
+}
 
 function loadWindowState(): { width: number; height: number; x?: number; y?: number } {
   try {
-    if (fs.existsSync(windowStatePath)) {
-      return JSON.parse(fs.readFileSync(windowStatePath, 'utf-8'));
+    const statePath = getWindowStatePath();
+    if (fs.existsSync(statePath)) {
+      return JSON.parse(fs.readFileSync(statePath, 'utf-8'));
     }
   } catch (e) {}
   return { width: 1280, height: 850 };
@@ -40,7 +47,7 @@ function loadWindowState(): { width: number; height: number; x?: number; y?: num
 function saveWindowState(win: BrowserWindow): void {
   try {
     const bounds = win.getBounds();
-    fs.writeFileSync(windowStatePath, JSON.stringify(bounds), 'utf-8');
+    fs.writeFileSync(getWindowStatePath(), JSON.stringify(bounds), 'utf-8');
   } catch (e) {}
 }
 
@@ -92,12 +99,23 @@ async function createWindow() {
 app.whenReady().then(async () => {
   try {
     await dbService.init();
+  } catch (err) {
+    console.error('Error initializing DB service:', err);
+  }
+
+  try {
     await telegramClient.init();
-    registerIpcHandlers();
-    createWindow();
+  } catch (err) {
+    console.error('Error initializing Telegram client:', err);
+  }
+
+  registerIpcHandlers();
+  createWindow();
+
+  try {
     startAutoSync();
   } catch (err) {
-    console.error('Error during app initialization:', err);
+    console.error('Error starting auto-sync:', err);
   }
 
   app.on('activate', () => {
@@ -131,6 +149,7 @@ app.on('window-all-closed', () => {
 function registerIpcHandlers() {
   // --- Auth ---
   ipcMain.handle('auth:get-status', () => telegramClient.getStatus());
+  ipcMain.handle('auth:get-credentials', () => telegramClient.getCredentials());
   ipcMain.handle('auth:configure', async (_, { apiId, apiHash, appTitle, shortName, serverEnvironment }) => {
     await telegramClient.configureCredentials(apiId, apiHash, appTitle, shortName, serverEnvironment);
     return true;

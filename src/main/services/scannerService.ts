@@ -4,6 +4,7 @@ import { DownloadItem, DownloadSession, ScanOptions, MediaType } from '../../typ
 import path from 'path';
 import { app } from 'electron';
 import { downloadManager } from './downloadManager';
+import { parseTelegramLink } from '../utils/telegramLink';
 
 
 export class ScannerService {
@@ -14,7 +15,6 @@ export class ScannerService {
       chat_title,
       from_message_id,
       to_message_id,
-      limit = 300,
       media_types,
       session_title = `Session - ${chat_title}`,
       destination_path,
@@ -22,7 +22,30 @@ export class ScannerService {
       concurrency = 1
     } = options;
 
-    const messages = await telegramClient.fetchMessages(chat_id, from_message_id, to_message_id, limit);
+    // Parse potential Telegram message links (e.g. https://t.me/c/3429930878/642)
+    const parsedFrom = parseTelegramLink(from_message_id);
+    const parsedTo = parseTelegramLink(to_message_id);
+
+    const effectiveFromId = parsedFrom.messageId ?? (typeof from_message_id === 'number' ? from_message_id : (from_message_id ? parseInt(String(from_message_id), 10) : undefined));
+    const effectiveToId = parsedTo.messageId ?? (typeof to_message_id === 'number' ? to_message_id : (to_message_id ? parseInt(String(to_message_id), 10) : undefined));
+    const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chat_id;
+
+    let messages: any[] = [];
+
+    // If specific message IDs were selected in UI
+    if (options.selected_message_ids && options.selected_message_ids.length > 0) {
+      const chunkSize = 200;
+      for (let i = 0; i < options.selected_message_ids.length; i += chunkSize) {
+        const chunkIds = options.selected_message_ids.slice(i, i + chunkSize);
+        const chunkMsgs = await telegramClient.getMessagesByIds(effectiveChatId, chunkIds);
+        if (chunkMsgs && chunkMsgs.length > 0) {
+          messages.push(...chunkMsgs);
+        }
+      }
+    } else {
+      // Fetch ALL messages in channel / range (limit = 0 -> unlimited full fetch)
+      messages = await telegramClient.fetchMessages(effectiveChatId, effectiveFromId, effectiveToId, 0);
+    }
 
     // Filter messages that contain media
     const mediaMessages = messages.filter((msg: any) => msg && msg.media);
@@ -199,7 +222,7 @@ export class ScannerService {
       session.chat_id,
       maxMessageId > 0 ? maxMessageId : undefined,
       undefined,
-      200
+      0
     );
 
     const mediaMessages = newMessages.filter((msg: any) => msg && msg.media && msg.id > maxMessageId);

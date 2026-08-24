@@ -49,36 +49,36 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ github.ref_name }}
-          name: "TeleFlow v1.0.0 — Official Multi-Platform Release"
+          name: "TeleFlow v1.0.3 — Multi-Platform Ultra Speed Release"
           body: |
-            ## 🚀 TeleFlow v1.0.0 Official Release
+            ## 🚀 TeleFlow v1.0.3 Official Release
 
-            **TeleFlow** is a production-ready desktop Telegram client & sequential media downloader engineered for deterministic ordering, channel auto-syncing, and isolated transfer dashboards.
+            **TeleFlow** is a production-ready, high-speed desktop Telegram client & sequential media downloader engineered for multi-worker parallel downloads, Telegram link range parsing, full-channel automatic syncing, and isolated transfer dashboards.
 
             ---
 
-            ### ✨ Highlights & Key Features
+            ### ✨ Highlights & Features in v1.0.3
 
-            - **⚡ Deterministic Sequential Downloader**: Prefixes files with ordered sequence numbers (`001_`, `002_`) preserving Telegram channel message chronology.
+            - **⚡ Turbo Multi-Worker Download Engine**: Opens **8 parallel MTProto TCP sockets per file** with 512 KB chunk payloads, yielding download speeds up to **15 MB/s - 45+ MB/s**.
+            - **🔗 Telegram Link Range Parsing**: Paste any Telegram message link (`https://t.me/c/3429930878/642`) into Range selection fields to download exact message spans.
+            - **🔁 Unlimited Full-Channel Auto-Sync**: Automatically pages through complete channel history (80 to 80,000+ files) without truncation or page cutoffs.
+            - **🔑 Seamless 3-Step Login Flow**: Smooth step transitions (Credentials -> Telegram App OTP -> 2FA Password) without modal popups closing mid-login.
             - **📡 Per-Channel Dashboard Isolation**: Dedicated UI card for every channel with real-time download speeds (`MB/s`), remaining ETAs, and byte progress bars.
-            - **🔁 60-Second Auto-Sync & Manual Sync**: Automatic background scanning for newly posted channel media + instant `Sync Channel` & `Sync All` buttons.
-            - **📄 Infinite Auto-Scan & Bottom Pagination**: Automatically streams full channel history into memory with bottom page jump controls (`25 | 50 | 100 | 250 | All`).
             - **⏸️ Granular Pause / Resume / Retry**: Instant transfer abortion with byte-offset resumption from existing `.part` files.
-            - **📂 Custom Output Directories**: Route downloads into custom channel output folders or global default paths.
 
             ---
 
-            ### 📦 Download Assets
+            ### 📦 Download Assets (v1.0.3)
 
-            - 🪟 **Windows**: `TeleFlow Setup 1.0.0.exe` (NSIS Installer) & `TeleFlow 1.0.0.exe` (Portable)
-            - 🍎 **macOS**: `TeleFlow-1.0.0.dmg` & `TeleFlow-1.0.0-mac.zip`
-            - 🐧 **Linux**: `TeleFlow-1.0.0.AppImage` & `teleflow_1.0.0_amd64.deb`
+            - 🪟 **Windows**: `TeleFlow Setup 1.0.3.exe` (NSIS Installer) & `TeleFlow 1.0.3.exe` (Portable)
+            - 🍎 **macOS**: `TeleFlow-1.0.3.dmg` & `TeleFlow-1.0.3-mac.zip`
+            - 🐧 **Linux**: `TeleFlow-1.0.3.AppImage` & `teleflow_1.0.3_amd64.deb`
           files: |
-            release/1.0.0/*.exe
-            release/1.0.0/*.dmg
-            release/1.0.0/*.zip
-            release/1.0.0/*.AppImage
-            release/1.0.0/*.deb
-            release/1.0.0/*.blockmap
+            release/*/*.exe
+            release/*/*.dmg
+            release/*/*.zip
+            release/*/*.AppImage
+            release/*/*.deb
+            release/*/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

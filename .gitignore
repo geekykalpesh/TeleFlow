@@ -9,13 +9,17 @@ out/
 build/
 release/
 
-# Archives & Binaries
+# Executables & Package Artifacts
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.blockmap
 *.zip
 *.tar.gz
 *.tgz
 *.rar
 *.7z
-
 
 # Local SQLite Databases & Sensitive Telegram Sessions (CRITICAL)
 *.db
@@ -27,9 +31,11 @@ telegram_session*
 teleflow.db
 .teleflow_data/
 .teleflow*/
+database/
+downloads/
+Downloads/
 
 # Temporary Download Files & Folders
-
 .temp/
 *.part
 *.tmp
@@ -50,14 +56,18 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Editor & OS Junk
+# IDE, Scratch & OS Junk
 .DS_Store
 Thumbs.db
 ehthumbs.db
 desktop.ini
 .idea/
+.vscode/
+.vs/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.gemini/
+.brain/

@@ -10,7 +10,7 @@ export class DownloadManager {
   private activeDownloads: Map<string, { startTime: number; lastDownloaded: number }> = new Map();
   private isProcessing: boolean = false;
   private isPaused: boolean = false;
-  private currentConcurrency: number = 1;
+  private currentConcurrency: number = 3;
   private mainWindow: BrowserWindow | null = null;
 
   public setMainWindow(win: BrowserWindow | null): void {
