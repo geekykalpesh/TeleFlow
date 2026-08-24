@@ -46,6 +46,7 @@
   "build": {
     "appId": "com.teleflow.app",
     "productName": "TeleFlow",
+    "npmRebuild": false,
     "directories": {
       "output": "release/${version}"
     },
