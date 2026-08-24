@@ -22,6 +22,10 @@
   ],
   "author": "TeleFlow Team <geekykalpesh@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/geekykalpesh/TeleFlow.git"
+  },
   "dependencies": {
     "big-integer": "^1.6.52",
     "lucide-react": "^0.475.0",
@@ -49,6 +53,13 @@
     "productName": "TeleFlow",
     "icon": "build/icon.png",
     "npmRebuild": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "geekykalpesh",
+        "repo": "TeleFlow"
+      }
+    ],
     "directories": {
       "output": "release/${version}"
     },
