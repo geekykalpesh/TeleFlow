@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Electron & Vite Build Outputs
+dist/
+dist-electron/
+out/
+build/
+release/
+
+# Archives & Binaries
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+
+# Local SQLite Databases & Sensitive Telegram Sessions (CRITICAL)
+*.db
+*.sqlite
+*.sqlite3
+*.session
+*.session-journal
+telegram_session*
+teleflow.db
+.teleflow_data/
+.teleflow*/
+
+# Temporary Download Files & Folders
+
+.temp/
+*.part
+*.tmp
+/TeleFlow/
+
+# Environment Variables & Local Configs
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor & OS Junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
