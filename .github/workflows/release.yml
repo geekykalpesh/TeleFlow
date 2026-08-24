@@ -41,8 +41,10 @@ jobs:
       - name: Compile & Build Frontend
         run: npm run build
 
-      - name: Build Electron Executables
-        run: npx electron-builder --config.npmRebuild=false
+      - name: Build & Publish Electron Executables
+        run: npx electron-builder --config.npmRebuild=false --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Publish Release to GitHub
         uses: softprops/action-gh-release@v2
@@ -81,4 +83,4 @@ jobs:
             release/*/*.deb
             release/*/*.blockmap
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}

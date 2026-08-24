@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "pack": "npm run build && electron-builder",
-    "build:win": "npm run build && electron-builder --win",
+    "pack": "npm run build && node -r dotenv/config node_modules/electron-builder/out/cli/cli.js",
+    "build:win": "npm run build && node -r dotenv/config node_modules/electron-builder/out/cli/cli.js --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
     "preview": "vite preview"
@@ -36,6 +36,7 @@
     "@types/react-dom": "^19.0.4",
     "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^4.3.4",
+    "dotenv": "^17.4.2",
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
     "typescript": "^5.7.3",
