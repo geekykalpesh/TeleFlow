@@ -132,14 +132,14 @@ export const QueueView: React.FC<QueueViewProps> = ({
 
   const handleResumeSession = async (sessionId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const toGo = items.filter(i => i.session_id === sessionId && i.status === 'PAUSED');
+    const toGo = items.filter(i => i.session_id === sessionId && (i.status === 'PAUSED' || i.status === 'FAILED'));
     for (const item of toGo) await (window as any).electronAPI?.resumeItem?.(item.id);
     onRefresh();
   };
 
   const handleRetrySession = async (sessionId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const toRetry = items.filter(i => i.session_id === sessionId && i.status === 'FAILED');
+    const toRetry = items.filter(i => i.session_id === sessionId && (i.status === 'FAILED' || i.status === 'PAUSED'));
     for (const item of toRetry) await (window as any).electronAPI?.retryItem?.(item.id);
     onRefresh();
   };

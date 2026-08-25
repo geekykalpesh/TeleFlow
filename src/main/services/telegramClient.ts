@@ -70,6 +70,8 @@ class TelegramClientService {
             phone: me.phone || ''
           };
           this.authStatus = { isAuthenticated: true, step: 'LOGGED_IN', user };
+          // Pre-warm GramJS entity cache on app startup so resume/retry works seamlessly
+          this.getDialogs().catch(e => console.warn('[TelegramClient] Startup dialog pre-warm warning:', e));
         }
       } catch (err: any) {
         console.error('Failed to restore Telegram session:', err);
@@ -294,7 +296,7 @@ class TelegramClientService {
   ): Promise<{ items: GroupMessageItem[]; hasMore: boolean; oldestMsgId: number | null }> {
     if (!this.client) throw new Error('Telegram client is not connected.');
 
-    const entity = await this.client.getEntity(chatId);
+    const entity = await this.resolveEntity(chatId);
 
     // GramJS: maxId means "get messages with ID < maxId" (i.e., older messages)
     // offsetId is the oldest message ID from the previous page — we pass it as maxId to go back further
@@ -363,15 +365,45 @@ class TelegramClientService {
 
   }
 
+  public async resolveEntity(chatId: string) {
+    if (!this.client) throw new Error('Telegram client is not connected.');
+
+    let targetId: any = chatId;
+    // If raw numeric string without prefix (e.g. "3429930878"), add -100 prefix so GramJS knows it is a Channel, not a User
+    if (/^\d+$/.test(chatId)) {
+      targetId = `-100${chatId}`;
+    }
+
+    try {
+      return await this.client.getEntity(targetId);
+    } catch (err: any) {
+      console.warn(`[EntityResolver] Initial resolution failed for ${targetId} (${err.message}). Pre-warming dialogs cache...`);
+
+      // Populate GramJS internal entity cache from Telegram
+      try {
+        await this.client.getDialogs({ limit: 100 });
+      } catch (dErr) {
+        console.warn(`[EntityResolver] Dialog pre-warm warning:`, dErr);
+      }
+
+      try {
+        return await this.client.getEntity(targetId);
+      } catch (retryErr) {
+        // Fallback to original raw ID
+        return await this.client.getEntity(chatId);
+      }
+    }
+  }
+
   public async getMessagesByIds(chatId: string, ids: number[]) {
     if (!this.client) throw new Error('Telegram client is not connected.');
-    const entity = await this.client.getEntity(chatId);
+    const entity = await this.resolveEntity(chatId);
     return this.client.getMessages(entity, { ids });
   }
 
   public async fetchMessages(chatId: string, fromId?: number, toId?: number, limit: number = 0) {
     if (!this.client) throw new Error('Telegram client is not connected.');
-    const entity = await this.client.getEntity(chatId);
+    const entity = await this.resolveEntity(chatId);
 
     // Single batch fetch for explicit small preview limits
     if (limit > 0 && limit <= 500) {
@@ -449,7 +481,7 @@ class TelegramClientService {
     };
 
     checkAborted();
-    const entity = await this.client.getEntity(chatId);
+    const entity = await this.resolveEntity(chatId);
     checkAborted();
 
     const messages = await this.client.getMessages(entity, { ids: [messageId] });
