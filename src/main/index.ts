@@ -187,6 +187,25 @@ function registerIpcHandlers() {
   ipcMain.handle('queue:retry-all-failed', () => downloadManager.retryAllFailed());
   ipcMain.handle('queue:set-concurrency', (_, n) => downloadManager.setConcurrency(n));
   ipcMain.handle('db:delete-session', (_, id) => dbService.deleteSession(id));
+  ipcMain.handle('db:delete-items', async (_, ids: string[], deleteFiles: boolean) => {
+    if (!ids || ids.length === 0) return { success: true, deletedCount: 0 };
+    for (const id of ids) {
+      try { telegramClient.abortDownload(id); } catch (e) {}
+      if (deleteFiles) {
+        const item = dbService.getItemById(id);
+        if (item) {
+          if (item.temp_path && fs.existsSync(item.temp_path)) {
+            try { fs.rmSync(item.temp_path, { force: true }); } catch (e) {}
+          }
+          if (item.final_path && fs.existsSync(item.final_path)) {
+            try { fs.rmSync(item.final_path, { force: true }); } catch (e) {}
+          }
+        }
+      }
+    }
+    dbService.deleteDownloadItems(ids);
+    return { success: true, deletedCount: ids.length };
+  });
   ipcMain.handle('db:clear-queue', () => dbService.clearQueue());
   ipcMain.handle('organizer:renumber', (_, sessionId) => fileOrganizer.renumberSessionFolder(sessionId));
 

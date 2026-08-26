@@ -40,6 +40,25 @@ export const QueueView: React.FC<QueueViewProps> = ({
   const [pageSize, setPageSize] = useState<number>(50); // 25, 50, 100, 250, 0=all
   const [jumpPageInput, setJumpPageInput] = useState('');
 
+  // Multi-selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: DownloadItem } | null>(null);
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState<{ show: boolean; items: DownloadItem[] }>({ show: false, items: [] });
+
+  useEffect(() => {
+    const handleCloseMenu = () => setContextMenu(null);
+    window.addEventListener('click', handleCloseMenu);
+    window.addEventListener('scroll', handleCloseMenu, true);
+    return () => {
+      window.removeEventListener('click', handleCloseMenu);
+      window.removeEventListener('scroll', handleCloseMenu, true);
+    };
+  }, []);
+
   const activeSessionId = internalSessionId;
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
@@ -120,6 +139,43 @@ export const QueueView: React.FC<QueueViewProps> = ({
   const handleOpenFolder = (p: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     (window as any).electronAPI?.openFolder?.(p);
+  };
+
+  // Bulk & Context Menu Deletion Handlers
+  const executeDelete = async (itemsToDelete: DownloadItem[], deleteFilesOnDisk: boolean) => {
+    setDeleteModal({ show: false, items: [] });
+    if (!itemsToDelete || itemsToDelete.length === 0) return;
+
+    const ids = itemsToDelete.map(i => i.id);
+    try {
+      await (window as any).electronAPI?.deleteItems?.(ids, deleteFilesOnDisk);
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        ids.forEach(id => next.delete(id));
+        return next;
+      });
+      onRefresh();
+    } catch (err) {
+      console.error('Delete items error:', err);
+    }
+  };
+
+  const handleRowContextMenu = (e: React.MouseEvent, item: DownloadItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!selectedIds.has(item.id)) {
+      setSelectedIds(new Set([item.id]));
+    }
+
+    const mouseX = Math.min(e.clientX, window.innerWidth - 220);
+    const mouseY = Math.min(e.clientY, window.innerHeight - 320);
+
+    setContextMenu({
+      x: mouseX,
+      y: mouseY,
+      item
+    });
   };
 
   // Session Actions
@@ -442,6 +498,24 @@ export const QueueView: React.FC<QueueViewProps> = ({
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.81rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.25)', position: 'sticky', top: 0, zIndex: 1 }}>
+                    <th style={{ width: '38px', padding: '10px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={paginatedFiles.length > 0 && paginatedFiles.every(i => selectedIds.has(i.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            const next = new Set(selectedIds);
+                            paginatedFiles.forEach(i => next.add(i.id));
+                            setSelectedIds(next);
+                          } else {
+                            const next = new Set(selectedIds);
+                            paginatedFiles.forEach(i => next.delete(i.id));
+                            setSelectedIds(next);
+                          }
+                        }}
+                        style={{ cursor: 'pointer', accentColor: '#00d4ff' }}
+                      />
+                    </th>
                     {[
                       { label: '#', key: 'sequence_number' as SortKey, w: '60px' },
                       { label: 'FILE NAME', key: 'original_filename' as SortKey, w: undefined },
@@ -467,10 +541,35 @@ export const QueueView: React.FC<QueueViewProps> = ({
                     const percent = item.total_bytes > 0 ? Math.min(100, Math.round((item.downloaded_bytes / item.total_bytes) * 100)) : 0;
                     const barColor = item.status === 'COMPLETED' ? '#10b981' : item.status === 'PAUSED' ? '#f59e0b' : item.status === 'FAILED' ? '#ef4444' : 'linear-gradient(90deg,#00d4ff,#3b82f6)';
                     const isErrExpanded = expandedError === item.id;
+                    const isSelected = selectedIds.has(item.id);
 
                     return (
                       <React.Fragment key={item.id}>
-                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: item.status === 'DOWNLOADING' ? 'rgba(0,212,255,0.03)' : 'transparent' }}>
+                        <tr
+                          onContextMenu={e => handleRowContextMenu(e, item)}
+                          style={{
+                            borderBottom: '1px solid rgba(255,255,255,0.04)',
+                            background: isSelected
+                              ? 'rgba(0,212,255,0.1)'
+                              : item.status === 'DOWNLOADING'
+                              ? 'rgba(0,212,255,0.03)'
+                              : 'transparent',
+                            transition: 'background 0.15s ease'
+                          }}
+                        >
+                          <td style={{ padding: '10px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                const next = new Set(selectedIds);
+                                if (e.target.checked) next.add(item.id);
+                                else next.delete(item.id);
+                                setSelectedIds(next);
+                              }}
+                              style={{ cursor: 'pointer', accentColor: '#00d4ff' }}
+                            />
+                          </td>
                           <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#00d4ff', fontSize: '0.78rem' }}>
                             {item.formatted_sequence}
                           </td>
@@ -904,6 +1003,228 @@ export const QueueView: React.FC<QueueViewProps> = ({
           })
         )}
       </div>
+
+      {/* ── Floating Bulk Action Bar ── */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 9000,
+          background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(0, 212, 255, 0.4)',
+          borderRadius: '12px', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '16px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontWeight: 800, color: '#00d4ff', fontSize: '0.85rem' }}>
+              {selectedIds.size} file(s) selected
+            </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              ({formatSize(items.filter(i => selectedIds.has(i.id)).reduce((a, b) => a + (b.total_bytes || 0), 0))})
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => {
+                const sel = items.filter(i => selectedIds.has(i.id));
+                for (const item of sel) handlePauseItem(item.id);
+              }}
+              className="btn"
+              style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '5px 12px', fontSize: '0.78rem', gap: '4px' }}
+            >
+              <Pause size={13} /> Pause
+            </button>
+            <button
+              onClick={() => {
+                const sel = items.filter(i => selectedIds.has(i.id));
+                for (const item of sel) handleResumeItem(item.id);
+              }}
+              className="btn btn-primary"
+              style={{ padding: '5px 12px', fontSize: '0.78rem', gap: '4px' }}
+            >
+              <Play size={13} /> Resume
+            </button>
+            <button
+              onClick={() => {
+                const sel = items.filter(i => selectedIds.has(i.id));
+                for (const item of sel) handleRetryItem(item.id);
+              }}
+              className="btn"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', padding: '5px 12px', fontSize: '0.78rem', gap: '4px' }}
+            >
+              <RefreshCw size={13} /> Retry
+            </button>
+            <button
+              onClick={() => {
+                const sel = items.filter(i => selectedIds.has(i.id));
+                setDeleteModal({ show: true, items: sel });
+              }}
+              className="btn btn-secondary"
+              style={{ padding: '5px 12px', fontSize: '0.78rem', gap: '4px' }}
+            >
+              <Trash2 size={13} /> Remove from List
+            </button>
+            <button
+              onClick={() => {
+                const sel = items.filter(i => selectedIds.has(i.id));
+                setDeleteModal({ show: true, items: sel });
+              }}
+              className="btn"
+              style={{ background: '#ef4444', color: '#fff', padding: '5px 14px', fontSize: '0.78rem', fontWeight: 700, gap: '4px' }}
+            >
+              <XCircle size={13} /> Delete Files from Disk
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: '6px', fontSize: '0.75rem', fontWeight: 600 }}
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Right-Click Context Menu ── */}
+      {contextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            zIndex: 9999,
+            background: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: '10px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+            padding: '6px',
+            minWidth: '200px',
+            fontSize: '0.81rem'
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {contextMenu.item.status === 'COMPLETED' && (
+            <button
+              onClick={() => {
+                const target = contextMenu.item.final_path || contextMenu.item.temp_path;
+                if (target) handleOpenPath(target);
+                setContextMenu(null);
+              }}
+              style={{ width: '100%', background: 'none', border: 'none', color: '#fff', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
+            >
+              <ExternalLink size={14} color="#10b981" /> Open File
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              const target = contextMenu.item.final_path || contextMenu.item.temp_path || activeSession?.destination_path;
+              if (target) handleOpenFolder(target);
+              setContextMenu(null);
+            }}
+            style={{ width: '100%', background: 'none', border: 'none', color: '#fff', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
+          >
+            <FolderOpen size={14} color="#00d4ff" /> Show in Folder
+          </button>
+
+          <div style={{ height: '1px', background: '#334155', margin: '4px 0' }} />
+
+          {(contextMenu.item.status === 'DOWNLOADING' || contextMenu.item.status === 'QUEUED') && (
+            <button
+              onClick={() => {
+                handlePauseItem(contextMenu.item.id);
+                setContextMenu(null);
+              }}
+              style={{ width: '100%', background: 'none', border: 'none', color: '#f59e0b', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
+            >
+              <Pause size={14} /> Pause Download
+            </button>
+          )}
+
+          {contextMenu.item.status === 'PAUSED' && (
+            <button
+              onClick={() => {
+                handleResumeItem(contextMenu.item.id);
+                setContextMenu(null);
+              }}
+              style={{ width: '100%', background: 'none', border: 'none', color: '#00d4ff', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
+            >
+              <Play size={14} /> Resume Download
+            </button>
+          )}
+
+          {contextMenu.item.status === 'FAILED' && (
+            <button
+              onClick={() => {
+                handleRetryItem(contextMenu.item.id);
+                setContextMenu(null);
+              }}
+              style={{ width: '100%', background: 'none', border: 'none', color: '#f87171', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
+            >
+              <RefreshCw size={14} /> Retry Download
+            </button>
+          )}
+
+          <div style={{ height: '1px', background: '#334155', margin: '4px 0' }} />
+
+          <button
+            onClick={() => {
+              const selectedList = items.filter(i => selectedIds.has(i.id));
+              setDeleteModal({
+                show: true,
+                items: selectedList.length > 0 ? selectedList : [contextMenu.item]
+              });
+              setContextMenu(null);
+            }}
+            style={{ width: '100%', background: 'none', border: 'none', color: '#f87171', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
+          >
+            <Trash2 size={14} color="#f87171" /> Remove from List
+          </button>
+
+          <button
+            onClick={() => {
+              const selectedList = items.filter(i => selectedIds.has(i.id));
+              setDeleteModal({
+                show: true,
+                items: selectedList.length > 0 ? selectedList : [contextMenu.item]
+              });
+              setContextMenu(null);
+            }}
+            style={{ width: '100%', background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
+          >
+            <XCircle size={14} color="#ef4444" /> Delete File & Remove
+          </button>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {deleteModal.show && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="glass-panel" style={{ width: '460px', maxWidth: '95%', padding: '24px', borderRadius: '14px', background: '#0f172a', border: '1px solid #334155', boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }}>
+            <h3 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontSize: '1.1rem', fontWeight: 800 }}>
+              <AlertTriangle size={22} /> Delete Options
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.5', margin: '0 0 16px 0' }}>
+              You are removing <strong>{deleteModal.items.length} file(s)</strong> from TeleFlow.
+            </p>
+            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px 14px', borderRadius: '8px', marginBottom: '20px', fontSize: '0.78rem', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <p style={{ margin: '0 0 6px 0', fontWeight: 700, color: '#fff' }}>Choose deletion method:</p>
+              <ul style={{ margin: 0, paddingLeft: '18px', lineHeight: '1.5' }}>
+                <li><strong style={{ color: '#f59e0b' }}>Remove from List Only:</strong> Removes entries from TeleFlow queue while keeping downloaded files on disk untouched.</li>
+                <li><strong style={{ color: '#ef4444' }}>Delete Files from Disk:</strong> Permanently deletes physical files/partials from your hard drive AND removes queue entries.</li>
+              </ul>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button onClick={() => setDeleteModal({ show: false, items: [] })} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }}>
+                Cancel
+              </button>
+              <button onClick={() => executeDelete(deleteModal.items, false)} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}>
+                Remove from List Only
+              </button>
+              <button onClick={() => executeDelete(deleteModal.items, true)} className="btn" style={{ background: '#ef4444', color: '#fff', padding: '8px 16px', fontSize: '0.8rem', fontWeight: 700 }}>
+                Delete Files & Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

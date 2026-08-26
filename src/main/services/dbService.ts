@@ -381,6 +381,18 @@ class DbService {
     this.save();
   }
 
+  public deleteDownloadItems(ids: string[]): void {
+    if (!this.db || !ids || ids.length === 0) return;
+    const formattedIds = ids.map(id => `'${id}'`).join(',');
+    const sessionRes = this.db.exec(`SELECT DISTINCT session_id FROM download_items WHERE id IN (${formattedIds})`);
+    const sessionIds: string[] = sessionRes.length && sessionRes[0].values ? sessionRes[0].values.map((r: any) => String(r[0])) : [];
+
+    this.db.run(`DELETE FROM download_items WHERE id IN (${formattedIds})`);
+
+    sessionIds.forEach(sid => this.updateSessionProgress(sid));
+    this.save();
+  }
+
   public clearQueue(): void {
     if (!this.db) return;
     this.db.run(`DELETE FROM download_items WHERE status IN ('QUEUED', 'PAUSED', 'FAILED')`);
