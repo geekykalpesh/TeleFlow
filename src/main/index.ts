@@ -53,16 +53,44 @@ function saveWindowState(win: BrowserWindow): void {
   } catch (e) {}
 }
 
+function getAppIconPath(): string {
+  const candidates = [
+    path.join(__dirname, '../dist/logo.png'),
+    path.join(__dirname, '../public/logo.png'),
+    path.join(__dirname, '../build/icon.png'),
+    path.join(app.getAppPath(), 'dist/logo.png'),
+    path.join(app.getAppPath(), 'public/logo.png'),
+    path.join(app.getAppPath(), 'build/icon.png'),
+    path.join(process.cwd(), 'public', 'logo.png'),
+    path.join(process.cwd(), 'build', 'icon.png')
+  ];
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return '';
+}
+
 function createTray() {
   if (tray) return;
 
-  const rawIconPath = path.join(process.cwd(), 'public', 'logo.png');
-  const fallbackIconPath = path.join(__dirname, '../public/logo.png');
-  const iconPath = fs.existsSync(rawIconPath) ? rawIconPath : fallbackIconPath;
+  const iconPath = getAppIconPath();
+  console.log('[Tray] Loading tray icon from:', iconPath);
 
-  let trayIcon = nativeImage.createFromPath(iconPath);
-  if (!trayIcon.isEmpty()) {
-    trayIcon = trayIcon.resize({ width: 16, height: 16 });
+  let trayIcon: ReturnType<typeof nativeImage.createFromPath>;
+  if (iconPath && fs.existsSync(iconPath)) {
+    trayIcon = nativeImage.createFromPath(iconPath);
+    if (!trayIcon.isEmpty()) {
+      trayIcon = trayIcon.resize({ width: 16, height: 16, quality: 'best' });
+    } else {
+      console.warn('[Tray] Loaded icon image was empty:', iconPath);
+      trayIcon = nativeImage.createEmpty();
+    }
+  } else {
+    console.warn('[Tray] Could not locate icon path for system tray');
+    trayIcon = nativeImage.createEmpty();
   }
 
   tray = new Tray(trayIcon);
@@ -132,10 +160,7 @@ function createTray() {
 
 async function createWindow() {
   const windowState = loadWindowState();
-
-  const rawIconPath = path.join(process.cwd(), 'public', 'logo.png');
-  const fallbackIconPath = path.join(__dirname, '../public/logo.png');
-  const appIcon = fs.existsSync(rawIconPath) ? rawIconPath : fallbackIconPath;
+  const appIconPath = getAppIconPath();
 
   mainWindow = new BrowserWindow({
     width: windowState.width,
@@ -145,7 +170,7 @@ async function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'TeleFlow',
-    icon: appIcon,
+    icon: appIconPath || undefined,
     frame: true,
     titleBarStyle: 'default',
     backgroundColor: '#0c0f17',

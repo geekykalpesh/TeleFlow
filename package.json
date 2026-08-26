@@ -1,6 +1,6 @@
 {
   "name": "teleflow",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Desktop Telegram Client & Sequential File Downloader with Deterministic Ordering",
   "main": "dist-electron/index.js",
   "scripts": {
@@ -66,6 +66,8 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "public/**/*",
+      "build/**/*",
       "node_modules/sql.js/**/*",
       "node_modules/telegram/**/*",
       "node_modules/big-integer/**/*",
