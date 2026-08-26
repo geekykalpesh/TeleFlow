@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Notification, Tray, Menu, nativeImage } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { dbService } from './services/dbService';
@@ -28,6 +28,8 @@ app.commandLine.appendSwitch('disable-gpu-compositing');
 app.commandLine.appendSwitch('disable-http-cache');
 
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuitting: boolean = false;
 
 // --- Window state persistence ---
 function getWindowStatePath(): string {
@@ -49,6 +51,83 @@ function saveWindowState(win: BrowserWindow): void {
     const bounds = win.getBounds();
     fs.writeFileSync(getWindowStatePath(), JSON.stringify(bounds), 'utf-8');
   } catch (e) {}
+}
+
+function createTray() {
+  if (tray) return;
+
+  const rawIconPath = path.join(process.cwd(), 'public', 'logo.png');
+  const fallbackIconPath = path.join(__dirname, '../public/logo.png');
+  const iconPath = fs.existsSync(rawIconPath) ? rawIconPath : fallbackIconPath;
+
+  let trayIcon = nativeImage.createFromPath(iconPath);
+  if (!trayIcon.isEmpty()) {
+    trayIcon = trayIcon.resize({ width: 16, height: 16 });
+  }
+
+  tray = new Tray(trayIcon);
+  tray.setToolTip('TeleFlow — Running in background');
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open TeleFlow',
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          createWindow();
+        }
+      }
+    },
+    {
+      label: 'Start Queue',
+      click: () => { downloadManager.startQueue(); }
+    },
+    {
+      label: 'Pause Queue',
+      click: () => { downloadManager.pauseQueue(); }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit TeleFlow',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore();
+          mainWindow.focus();
+        } else {
+          mainWindow.focus();
+        }
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    } else {
+      createWindow();
+    }
+  });
+
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    } else {
+      createWindow();
+    }
+  });
 }
 
 async function createWindow() {
@@ -89,9 +168,14 @@ async function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // Save window state on close
-  mainWindow.on('close', () => {
+  // Intercept window close to run in system tray background unless explicitly quitting
+  mainWindow.on('close', (e) => {
     if (mainWindow) saveWindowState(mainWindow);
+    if (!isQuitting) {
+      e.preventDefault();
+      mainWindow?.hide();
+      return false;
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -116,6 +200,7 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers();
   createWindow();
+  createTray();
 
   try {
     startAutoSync();
@@ -126,6 +211,10 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) { createWindow(); }
   });
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 let autoSyncTimer: NodeJS.Timeout | null = null;
@@ -147,7 +236,7 @@ function startAutoSync() {
 
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') { app.quit(); }
+  if (isQuitting && process.platform !== 'darwin') { app.quit(); }
 });
 
 // Register global keyboard shortcuts in renderer via IPC

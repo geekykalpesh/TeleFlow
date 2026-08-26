@@ -312,14 +312,15 @@ class TelegramClientService {
     const mediaItems: GroupMessageItem[] = [];
 
     for (const msg of messages) {
-      if (!msg || !msg.media) continue;
+      if (!msg) continue;
       const media = msg.media as any;
       let filename = '';
       let mime_type = 'application/octet-stream';
       let size = 0;
       let media_type: MediaType = 'unknown';
+      let text_content = msg.message || '';
 
-      if (media.document) {
+      if (media && media.document) {
         const doc = media.document;
         size = Number(doc.size || 0);
         mime_type = doc.mimeType || 'application/octet-stream';
@@ -331,11 +332,18 @@ class TelegramClientService {
         if (mime_type.startsWith('video/')) media_type = 'video';
         else if (mime_type.startsWith('audio/')) media_type = 'audio';
         else media_type = 'document';
-      } else if (media.photo) {
+      } else if (media && media.photo) {
         media_type = 'photo';
         mime_type = 'image/jpeg';
         filename = `photo_${msg.id}.jpg`;
         size = Number(media.photo.sizes ? media.photo.sizes[media.photo.sizes.length - 1]?.size || 0 : 0);
+      } else {
+        // Non-media message (text, URL link, channel post)
+        const hasUrl = /https?:\/\/[^\s]+/i.test(text_content);
+        media_type = hasUrl ? 'link' : 'text';
+        mime_type = 'text/plain';
+        filename = `${this.generateTextTitle(text_content, msg.id)}.txt`;
+        size = Buffer.byteLength(text_content, 'utf-8');
       }
 
       if (!filename) filename = `telegram_${media_type}_${msg.id}.bin`;
@@ -348,7 +356,8 @@ class TelegramClientService {
         filename,
         size,
         mime_type,
-        text: msg.message || ''
+        text: text_content,
+        text_content
       });
     }
 
@@ -362,6 +371,16 @@ class TelegramClientService {
       : null;
 
     return { items: mediaItems, hasMore, oldestMsgId };
+  }
+
+  private generateTextTitle(text: string, msgId: number): string {
+    if (!text || text.trim() === '') return `message_${msgId}`;
+    const firstLine = text.split('\n').map(l => l.trim()).find(l => l.length > 0) || '';
+    const clean = firstLine.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim();
+    if (clean.length > 0) {
+      return clean.substring(0, 45).replace(/\.+$/, '');
+    }
+    return `message_${msgId}`;
 
   }
 

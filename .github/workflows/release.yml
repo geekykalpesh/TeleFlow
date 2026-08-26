@@ -51,9 +51,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ github.ref_name }}
-          name: "TeleFlow v1.0.3 — Multi-Platform Ultra Speed Release"
+          name: "TeleFlow ${{ github.ref_name }} Release"
           body: |
-            ## 🚀 TeleFlow v1.0.3 Official Release
+            ## 🚀 TeleFlow ${{ github.ref_name }} Official Release
 
             **TeleFlow** is a production-ready, high-speed desktop Telegram client & sequential media downloader engineered for multi-worker parallel downloads, Telegram link range parsing, full-channel automatic syncing, and isolated transfer dashboards.
 

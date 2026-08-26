@@ -124,6 +124,29 @@ export class DownloadManager {
       return;
     }
 
+    // Handle text / link items directly without MTProto media download
+    if (item.media_type === 'text' || item.media_type === 'link' || item.text_content !== undefined) {
+      try {
+        const textToSave = item.text_content || '';
+        const buffer = Buffer.from(textToSave, 'utf-8');
+        const finalDir = path.dirname(item.final_path);
+        if (!fs.existsSync(finalDir)) {
+          fs.mkdirSync(finalDir, { recursive: true });
+        }
+        fs.writeFileSync(item.final_path, buffer);
+        console.log(`[TextSave] Saved #${item.sequence_number} text/link content to: ${item.final_path}`);
+        dbService.updateItemProgress(item.id, buffer.length, buffer.length, 0, 'COMPLETED');
+        this.notifyProgress(item.id, 'COMPLETED', buffer.length, buffer.length, 0, undefined, item.final_path);
+      } catch (err: any) {
+        console.error(`[TextSave Error] Item #${item.sequence_number}:`, err);
+        dbService.updateItemProgress(item.id, 0, item.total_bytes, 0, 'FAILED', err.message || String(err));
+        this.notifyProgress(item.id, 'FAILED', 0, item.total_bytes, 0, err.message || String(err));
+      } finally {
+        setTimeout(() => this.processQueue(), 100);
+      }
+      return;
+    }
+
     const startTime = Date.now();
     this.activeDownloads.set(item.id, { startTime, lastDownloaded: 0 });
 

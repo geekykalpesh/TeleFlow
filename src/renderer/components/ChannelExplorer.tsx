@@ -3,7 +3,7 @@ import { TelegramChat, GroupMessageItem, ScanOptions, MediaType } from '../../ty
 import {
   Search, FolderOpen, ArrowLeft, PlusCircle, CheckSquare, Square,
   FileText, Video, Music, Image as ImageIcon, FolderPlus, Settings2,
-  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader, AlertTriangle, Download
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader, AlertTriangle, Download, Link
 } from 'lucide-react';
 
 interface ChannelExplorerProps {
@@ -11,7 +11,18 @@ interface ChannelExplorerProps {
 }
 
 const PAGE_SIZE = 100;
-const MEDIA_TYPES: MediaType[] = ['video', 'audio', 'photo', 'document'];
+const MEDIA_TYPES: MediaType[] = ['video', 'audio', 'photo', 'document', 'text', 'link'];
+
+const TypeIcon: React.FC<{ type: MediaType }> = ({ type }) => {
+  switch (type) {
+    case 'video': return <Video size={14} color="#3b82f6" />;
+    case 'audio': case 'voice': return <Music size={14} color="#ec4899" />;
+    case 'photo': return <ImageIcon size={14} color="#10b981" />;
+    case 'document': return <FileText size={14} color="#f59e0b" />;
+    case 'link': return <Link size={14} color="#00d4ff" />;
+    case 'text': default: return <FileText size={14} color="#a855f7" />;
+  }
+};
 
 export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreated }) => {
   const [searchQuery, setSearchQuery] = useState('');

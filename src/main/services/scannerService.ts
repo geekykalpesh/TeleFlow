@@ -47,11 +47,11 @@ export class ScannerService {
       messages = await telegramClient.fetchMessages(effectiveChatId, effectiveFromId, effectiveToId, 0);
     }
 
-    // Filter messages that contain media
-    const mediaMessages = messages.filter((msg: any) => msg && msg.media);
+    // Process all valid messages in the fetched sequence (files, links, text posts)
+    const validMessages = messages.filter((msg: any) => msg && msg.id);
 
     // CRITICAL REQUIREMENT: Sort messages strictly by Telegram message_id ascending
-    mediaMessages.sort((a: any, b: any) => a.id - b.id);
+    validMessages.sort((a: any, b: any) => a.id - b.id);
 
     // Use settings default destination if not provided
     const settingsDefault = dbService.getSetting('default_destination', '');
@@ -62,7 +62,7 @@ export class ScannerService {
     const tempDir = path.join(defaultBaseDir, '.temp');
 
     const sessionId = `session_${Date.now()}`;
-    const padding = Math.max(3, String(mediaMessages.length).length);
+    const padding = Math.max(3, String(validMessages.length).length);
 
     const downloadItems: DownloadItem[] = [];
 
@@ -70,11 +70,11 @@ export class ScannerService {
     const selectedSet = options.selected_message_ids && options.selected_message_ids.length > 0
       ? new Set(options.selected_message_ids)
       : null;
-    const filteredMedia = selectedSet
-      ? mediaMessages.filter((msg: any) => selectedSet.has(msg.id))
-      : mediaMessages;
+    const filteredMessages = selectedSet
+      ? validMessages.filter((msg: any) => selectedSet.has(msg.id))
+      : validMessages;
 
-    filteredMedia.forEach((msg: any, index: number) => {
+    filteredMessages.forEach((msg: any, index: number) => {
 
       const seqNumber = index + 1;
       const formattedSeq = String(seqNumber).padStart(padding, '0');
@@ -109,6 +109,7 @@ export class ScannerService {
         status: 'QUEUED',
         temp_path: tempPath,
         final_path: finalPath,
+        text_content: mediaInfo.text_content,
         created_at: new Date().toISOString()
       });
     });
@@ -139,16 +140,17 @@ export class ScannerService {
     return session;
   }
 
-  private extractMediaDetails(msg: any): { filename: string; extension: string; mime_type: string; size: number; media_type: MediaType } {
+  private extractMediaDetails(msg: any): { filename: string; extension: string; mime_type: string; size: number; media_type: MediaType; text_content?: string } {
     let filename = '';
     let extension = '.bin';
     let mime_type = 'application/octet-stream';
     let size = 0;
     let media_type: MediaType = 'unknown';
+    const text_content = msg.message || '';
 
-    const media = msg.media;
+    const media = msg ? msg.media : null;
 
-    if (media.document) {
+    if (media && media.document) {
       const doc = media.document;
       size = Number(doc.size || 0);
       mime_type = doc.mimeType || 'application/octet-stream';
@@ -167,22 +169,40 @@ export class ScannerService {
       else if (mime_type.startsWith('audio/')) media_type = 'audio';
       else media_type = 'document';
 
-    } else if (media.photo) {
+    } else if (media && media.photo) {
       media_type = 'photo';
       mime_type = 'image/jpeg';
       extension = '.jpg';
       filename = `photo_${msg.id}.jpg`;
       size = Number(media.photo.sizes ? media.photo.sizes[media.photo.sizes.length - 1]?.size || 0 : 0);
+    } else {
+      // Non-media message (text post, URL link)
+      const hasUrl = /https?:\/\/[^\s]+/i.test(text_content);
+      media_type = hasUrl ? 'link' : 'text';
+      mime_type = 'text/plain';
+      extension = '.txt';
+      filename = `${this.generateTextTitle(text_content, msg.id)}.txt`;
+      size = Buffer.byteLength(text_content, 'utf-8');
     }
 
     if (!filename) {
-      extension = this.getExtensionFromMime(mime_type);
+      extension = media_type === 'text' || media_type === 'link' ? '.txt' : this.getExtensionFromMime(mime_type);
       filename = `telegram_${media_type}_${msg.id}${extension}`;
-    } else {
+    } else if (media_type !== 'text' && media_type !== 'link') {
       extension = path.extname(filename) || this.getExtensionFromMime(mime_type);
     }
 
-    return { filename, extension, mime_type, size, media_type };
+    return { filename, extension, mime_type, size, media_type, text_content: text_content || undefined };
+  }
+
+  private generateTextTitle(text: string, msgId: number): string {
+    if (!text || text.trim() === '') return `message_${msgId}`;
+    const firstLine = text.split('\n').map(l => l.trim()).find(l => l.length > 0) || '';
+    const clean = firstLine.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim();
+    if (clean.length > 0) {
+      return clean.substring(0, 45).replace(/\.+$/, '');
+    }
+    return `message_${msgId}`;
   }
 
   private getExtensionFromMime(mime: string): string {
@@ -225,19 +245,19 @@ export class ScannerService {
       0
     );
 
-    const mediaMessages = newMessages.filter((msg: any) => msg && msg.media && msg.id > maxMessageId);
-    if (mediaMessages.length === 0) {
+    const validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId);
+    if (validNewMessages.length === 0) {
       return { addedCount: 0, message: `Channel "${session.title}" is up to date.` };
     }
 
-    mediaMessages.sort((a: any, b: any) => a.id - b.id);
+    validNewMessages.sort((a: any, b: any) => a.id - b.id);
 
     const defaultBaseDir = session.destination_path;
     const tempDir = path.join(defaultBaseDir, '.temp');
-    const padding = Math.max(session.sequence_padding || 3, String(maxSeqNumber + mediaMessages.length).length);
+    const padding = Math.max(session.sequence_padding || 3, String(maxSeqNumber + validNewMessages.length).length);
     const newItems: DownloadItem[] = [];
 
-    mediaMessages.forEach((msg: any, index: number) => {
+    validNewMessages.forEach((msg: any, index: number) => {
       const seqNumber = maxSeqNumber + index + 1;
       const formattedSeq = String(seqNumber).padStart(padding, '0');
       const mediaInfo = this.extractMediaDetails(msg);
@@ -267,6 +287,7 @@ export class ScannerService {
         status: 'QUEUED',
         temp_path: tempPath,
         final_path: finalPath,
+        text_content: mediaInfo.text_content,
         created_at: new Date().toISOString()
       });
     });

@@ -95,9 +95,17 @@ class DbService {
         error_message TEXT,
         created_at TEXT NOT NULL,
         completed_at TEXT,
+        text_content TEXT,
         FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
       );
     `);
+
+    // Safe migration check for existing DBs created before text_content column
+    try {
+      this.db.run(`ALTER TABLE download_items ADD COLUMN text_content TEXT`);
+    } catch (e) {
+      // Column already exists
+    }
 
     this.db.run(`
       CREATE TABLE IF NOT EXISTS settings (
@@ -231,8 +239,8 @@ class DbService {
         id, session_id, chat_id, chat_title, message_id, sequence_number,
         formatted_sequence, media_type, original_filename, extension, mime_type,
         telegram_file_id, total_bytes, downloaded_bytes, speed_bps, status,
-        temp_path, final_path, error_message, created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        temp_path, final_path, error_message, created_at, completed_at, text_content
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of items) {
@@ -242,7 +250,8 @@ class DbService {
         item.original_filename, item.extension, item.mime_type,
         item.telegram_file_id || null, item.total_bytes, item.downloaded_bytes,
         item.speed_bps, item.status, item.temp_path, item.final_path,
-        item.error_message || null, item.created_at, item.completed_at || null
+        item.error_message || null, item.created_at, item.completed_at || null,
+        item.text_content || null
       ]);
     }
     stmt.free();
@@ -251,7 +260,7 @@ class DbService {
 
   public getDownloadItems(sessionId?: string): DownloadItem[] {
     if (!this.db) return [];
-    let query = `SELECT * FROM download_items`;
+    let query = `SELECT id, session_id, chat_id, chat_title, message_id, sequence_number, formatted_sequence, media_type, original_filename, extension, mime_type, telegram_file_id, total_bytes, downloaded_bytes, speed_bps, status, temp_path, final_path, error_message, created_at, completed_at, text_content FROM download_items`;
     if (sessionId) {
       query += ` WHERE session_id = '${sessionId}'`;
     }
@@ -281,13 +290,14 @@ class DbService {
       final_path: row[17],
       error_message: row[18],
       created_at: row[19],
-      completed_at: row[20]
+      completed_at: row[20],
+      text_content: row[21] || undefined
     }));
   }
 
   public getItemById(id: string): DownloadItem | null {
     if (!this.db) return null;
-    const res = this.db.exec(`SELECT * FROM download_items WHERE id = '${id}'`);
+    const res = this.db.exec(`SELECT id, session_id, chat_id, chat_title, message_id, sequence_number, formatted_sequence, media_type, original_filename, extension, mime_type, telegram_file_id, total_bytes, downloaded_bytes, speed_bps, status, temp_path, final_path, error_message, created_at, completed_at, text_content FROM download_items WHERE id = '${id}'`);
     if (!res.length || !res[0].values.length) return null;
     const row = res[0].values[0];
     return {
@@ -311,14 +321,15 @@ class DbService {
       final_path: row[17] as string,
       error_message: row[18] as string,
       created_at: row[19] as string,
-      completed_at: row[20] as string
+      completed_at: row[20] as string,
+      text_content: (row[21] as string) || undefined
     };
   }
 
   public getNextQueuedItem(sessionId?: string): DownloadItem | null {
 
     if (!this.db) return null;
-    let query = `SELECT * FROM download_items WHERE status = 'QUEUED'`;
+    let query = `SELECT id, session_id, chat_id, chat_title, message_id, sequence_number, formatted_sequence, media_type, original_filename, extension, mime_type, telegram_file_id, total_bytes, downloaded_bytes, speed_bps, status, temp_path, final_path, error_message, created_at, completed_at, text_content FROM download_items WHERE status = 'QUEUED'`;
     if (sessionId) {
       query += ` AND session_id = '${sessionId}'`;
     }
@@ -349,7 +360,8 @@ class DbService {
       final_path: row[17] as string,
       error_message: row[18] as string,
       created_at: row[19] as string,
-      completed_at: row[20] as string
+      completed_at: row[20] as string,
+      text_content: (row[21] as string) || undefined
     };
   }
 

@@ -1,6 +1,6 @@
 export type DownloadStatus = 'QUEUED' | 'DOWNLOADING' | 'COMPLETED' | 'FAILED' | 'PAUSED';
 
-export type MediaType = 'video' | 'audio' | 'document' | 'photo' | 'voice' | 'unknown';
+export type MediaType = 'video' | 'audio' | 'document' | 'photo' | 'voice' | 'text' | 'link' | 'unknown';
 
 export interface DownloadItem {
   id: string;
@@ -21,6 +21,7 @@ export interface DownloadItem {
   status: DownloadStatus;
   temp_path: string;
   final_path: string;
+  text_content?: string;
   error_message?: string;
   created_at: string;
   completed_at?: string;
@@ -80,6 +81,7 @@ export interface GroupMessageItem {
   size: number;
   mime_type: string;
   text?: string;
+  text_content?: string;
 }
 
 export interface ScanOptions {
