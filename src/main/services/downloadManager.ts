@@ -86,11 +86,14 @@ export class DownloadManager {
   }
 
   private checkAllComplete(): void {
+    if (this.isPaused) return;
+
     // Send system notification when entire queue is drained
     const items = dbService.getDownloadItems();
     const hasCompleted = items.some(i => i.status === 'COMPLETED');
-    const hasActive = items.some(i => i.status === 'QUEUED' || i.status === 'DOWNLOADING');
-    if (hasCompleted && !hasActive) {
+    const hasUnfinished = items.some(i => i.status === 'QUEUED' || i.status === 'DOWNLOADING' || i.status === 'PAUSED');
+
+    if (hasCompleted && !hasUnfinished) {
       this.sendSystemNotification(
         'TeleFlow — Downloads Complete',
         `All downloads finished. ${items.filter(i => i.status === 'COMPLETED').length} files saved.`

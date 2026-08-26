@@ -383,14 +383,18 @@ class DbService {
 
   public deleteDownloadItems(ids: string[]): void {
     if (!this.db || !ids || ids.length === 0) return;
-    const formattedIds = ids.map(id => `'${id}'`).join(',');
-    const sessionRes = this.db.exec(`SELECT DISTINCT session_id FROM download_items WHERE id IN (${formattedIds})`);
-    const sessionIds: string[] = sessionRes.length && sessionRes[0].values ? sessionRes[0].values.map((r: any) => String(r[0])) : [];
+    try {
+      const formattedIds = ids.map(id => `'${id}'`).join(',');
+      const sessionRes = this.db.exec(`SELECT DISTINCT session_id FROM download_items WHERE id IN (${formattedIds})`);
+      const sessionIds: string[] = sessionRes.length && sessionRes[0].values ? sessionRes[0].values.map((r: any) => String(r[0])) : [];
 
-    this.db.run(`DELETE FROM download_items WHERE id IN (${formattedIds})`);
+      this.db.run(`DELETE FROM download_items WHERE id IN (${formattedIds})`);
 
-    sessionIds.forEach(sid => this.updateSessionProgress(sid));
-    this.save();
+      sessionIds.forEach(sid => this.updateSessionProgress(sid));
+      this.save();
+    } catch (err) {
+      console.error('[DbService] deleteDownloadItems error:', err);
+    }
   }
 
   public clearQueue(): void {
@@ -407,24 +411,20 @@ class DbService {
 
   public updateSessionProgress(sessionId: string): void {
     if (!this.db) return;
-    const res = this.db.exec(`
-      SELECT 
-        COUNT(*) as total_files,
-        SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_files,
-        SUM(downloaded_bytes) as downloaded_bytes
-      FROM download_items WHERE session_id = '${sessionId}'
-    `);
-    if (!res.length || !res[0].values.length) return;
-    const [total_files, completed_files, downloaded_bytes] = res[0].values[0];
-    const status = Number(total_files) > 0 && Number(completed_files) === Number(total_files) ? 'COMPLETED' : 'ACTIVE';
-    this.db.run(`
-      UPDATE sessions SET 
-        completed_files = ${Number(completed_files) || 0},
-        downloaded_bytes = ${Number(downloaded_bytes) || 0},
-        status = '${status}'
-      WHERE id = '${sessionId}'
-    `);
-    this.save();
+    try {
+      const res = this.db.exec(`
+        SELECT 
+          COUNT(*) as total_files,
+          SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_files
+        FROM download_items WHERE session_id = '${sessionId}'
+      `);
+      if (!res.length || !res[0].values.length) return;
+      const [total_files, completed_files] = res[0].values[0];
+      const status = Number(total_files) > 0 && Number(completed_files) === Number(total_files) ? 'COMPLETED' : 'ACTIVE';
+      this.db.run(`UPDATE sessions SET status = '${status}' WHERE id = '${sessionId}'`);
+    } catch (e) {
+      console.warn('[DbService] updateSessionProgress warning:', e);
+    }
   }
 
   public renumberSessionItems(sessionId: string): DownloadItem[] {

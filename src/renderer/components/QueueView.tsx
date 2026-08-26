@@ -46,9 +46,6 @@ export const QueueView: React.FC<QueueViewProps> = ({
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: DownloadItem } | null>(null);
 
-  // Delete confirmation modal state
-  const [deleteModal, setDeleteModal] = useState<{ show: boolean; items: DownloadItem[] }>({ show: false, items: [] });
-
   useEffect(() => {
     const handleCloseMenu = () => setContextMenu(null);
     window.addEventListener('click', handleCloseMenu);
@@ -143,7 +140,6 @@ export const QueueView: React.FC<QueueViewProps> = ({
 
   // Bulk & Context Menu Deletion Handlers
   const executeDelete = async (itemsToDelete: DownloadItem[], deleteFilesOnDisk: boolean) => {
-    setDeleteModal({ show: false, items: [] });
     if (!itemsToDelete || itemsToDelete.length === 0) return;
 
     const ids = itemsToDelete.map(i => i.id);
@@ -483,6 +479,25 @@ export const QueueView: React.FC<QueueViewProps> = ({
                 </button>
               );
             })}
+
+            {selectedIds.size > 0 && (
+              <button
+                onClick={() => {
+                  const sel = items.filter(i => selectedIds.has(i.id));
+                  if (sel.length === 0) return;
+                  if (window.confirm(`Delete ${sel.length} selected file(s) from disk and remove from TeleFlow?`)) {
+                    executeDelete(sel, true);
+                  }
+                }}
+                style={{
+                  padding: '4px 12px', borderRadius: '20px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 800,
+                  background: '#ef4444', color: '#ffffff', border: 'none', display: 'flex', alignItems: 'center', gap: '4px',
+                  boxShadow: '0 0 10px rgba(239,68,68,0.4)'
+                }}
+              >
+                <Trash2 size={12} /> Delete Selected ({selectedIds.size})
+              </button>
+            )}
           </div>
         </div>
 
@@ -643,6 +658,19 @@ export const QueueView: React.FC<QueueViewProps> = ({
                                   </button>
                                 </>
                               )}
+                              {/* Trash / Delete button on every row */}
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  if (window.confirm(`Delete "${item.original_filename}" from disk and remove from TeleFlow?`)) {
+                                    executeDelete([item], true);
+                                  }
+                                }}
+                                title="Delete file or remove from list"
+                                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', borderRadius: '5px', padding: '3px 6px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <Trash2 size={11} />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1055,7 +1083,9 @@ export const QueueView: React.FC<QueueViewProps> = ({
             <button
               onClick={() => {
                 const sel = items.filter(i => selectedIds.has(i.id));
-                setDeleteModal({ show: true, items: sel });
+                if (sel.length > 0 && window.confirm(`Remove ${sel.length} selected item(s) from list (keep files on disk)?`)) {
+                  executeDelete(sel, false);
+                }
               }}
               className="btn btn-secondary"
               style={{ padding: '5px 12px', fontSize: '0.78rem', gap: '4px' }}
@@ -1065,7 +1095,9 @@ export const QueueView: React.FC<QueueViewProps> = ({
             <button
               onClick={() => {
                 const sel = items.filter(i => selectedIds.has(i.id));
-                setDeleteModal({ show: true, items: sel });
+                if (sel.length > 0 && window.confirm(`Permanently delete ${sel.length} selected file(s) from disk and remove from TeleFlow?`)) {
+                  executeDelete(sel, true);
+                }
               }}
               className="btn"
               style={{ background: '#ef4444', color: '#fff', padding: '5px 14px', fontSize: '0.78rem', fontWeight: 700, gap: '4px' }}
@@ -1167,11 +1199,11 @@ export const QueueView: React.FC<QueueViewProps> = ({
           <button
             onClick={() => {
               const selectedList = items.filter(i => selectedIds.has(i.id));
-              setDeleteModal({
-                show: true,
-                items: selectedList.length > 0 ? selectedList : [contextMenu.item]
-              });
+              const targetList = selectedList.length > 0 ? selectedList : [contextMenu.item];
               setContextMenu(null);
+              if (window.confirm(`Remove ${targetList.length} item(s) from list (keep files on disk)?`)) {
+                executeDelete(targetList, false);
+              }
             }}
             style={{ width: '100%', background: 'none', border: 'none', color: '#f87171', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
           >
@@ -1181,48 +1213,16 @@ export const QueueView: React.FC<QueueViewProps> = ({
           <button
             onClick={() => {
               const selectedList = items.filter(i => selectedIds.has(i.id));
-              setDeleteModal({
-                show: true,
-                items: selectedList.length > 0 ? selectedList : [contextMenu.item]
-              });
+              const targetList = selectedList.length > 0 ? selectedList : [contextMenu.item];
               setContextMenu(null);
+              if (window.confirm(`Permanently delete ${targetList.length} file(s) from disk and remove from TeleFlow?`)) {
+                executeDelete(targetList, true);
+              }
             }}
             style={{ width: '100%', background: 'none', border: 'none', color: '#ef4444', fontWeight: 700, padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
           >
             <XCircle size={14} color="#ef4444" /> Delete File & Remove
           </button>
-        </div>
-      )}
-
-      {/* ── Delete Confirmation Modal ── */}
-      {deleteModal.show && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div className="glass-panel" style={{ width: '460px', maxWidth: '95%', padding: '24px', borderRadius: '14px', background: '#0f172a', border: '1px solid #334155', boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }}>
-            <h3 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontSize: '1.1rem', fontWeight: 800 }}>
-              <AlertTriangle size={22} /> Delete Options
-            </h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.5', margin: '0 0 16px 0' }}>
-              You are removing <strong>{deleteModal.items.length} file(s)</strong> from TeleFlow.
-            </p>
-            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px 14px', borderRadius: '8px', marginBottom: '20px', fontSize: '0.78rem', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <p style={{ margin: '0 0 6px 0', fontWeight: 700, color: '#fff' }}>Choose deletion method:</p>
-              <ul style={{ margin: 0, paddingLeft: '18px', lineHeight: '1.5' }}>
-                <li><strong style={{ color: '#f59e0b' }}>Remove from List Only:</strong> Removes entries from TeleFlow queue while keeping downloaded files on disk untouched.</li>
-                <li><strong style={{ color: '#ef4444' }}>Delete Files from Disk:</strong> Permanently deletes physical files/partials from your hard drive AND removes queue entries.</li>
-              </ul>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button onClick={() => setDeleteModal({ show: false, items: [] })} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }}>
-                Cancel
-              </button>
-              <button onClick={() => executeDelete(deleteModal.items, false)} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}>
-                Remove from List Only
-              </button>
-              <button onClick={() => executeDelete(deleteModal.items, true)} className="btn" style={{ background: '#ef4444', color: '#fff', padding: '8px 16px', fontSize: '0.8rem', fontWeight: 700 }}>
-                Delete Files & Remove
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

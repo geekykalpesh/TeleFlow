@@ -4,7 +4,7 @@
 
 # TeleFlow — Desktop Telegram Client & High-Speed Sequential Downloader
 
-[![Version](https://img.shields.io/badge/version-1.0.3-00d4ff.svg)](https://github.com/geekykalpesh/TeleFlow/releases/tag/v1.0.3)
+[![Version](https://img.shields.io/badge/version-1.0.4-00d4ff.svg)](https://github.com/geekykalpesh/TeleFlow/releases/tag/v1.0.4)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-3b82f6.svg)](https://github.com/geekykalpesh/TeleFlow/releases)
 [![Electron](https://img.shields.io/badge/Electron-34.5.8-47858c.svg)](https://www.electronjs.org/)
@@ -14,50 +14,42 @@
 
 ---
 
-## 🌟 Key Features (v1.0.3)
+## 🌟 Key Features (v1.0.4)
 
-### 1. 🚀 Turbo Multi-Worker Download Engine (15–45+ MB/s)
-- Opens **8 parallel MTProto TCP sockets per file** directly connected to Telegram Data Centers (`dcId`), bypassing single-connection rate caps.
+### 1. 🗑️ Instant Multi-Select, Context Menu & File Deletion (Disk & Queue)
+- **Checkboxes & Select All**: Select multiple files or all channel files at once with a header checkbox.
+- **Right-Click Context Menu**: Right-click any row to **Open File**, **Show in Folder**, **Pause/Resume/Retry**, **Remove from List**, or **Delete File & Remove**.
+- **1-Click File Erasure**: Deletes files/partials permanently from your local hard drive and SQLite database in 1 single step.
+
+### 2. 🎨 Native Windows Application & Installer Icons
+- Full native Windows `.ico` integration for desktop shortcuts, Start Menu, taskbar window titlebar, and NSIS installer.
+
+### 3. 🚀 Turbo Multi-Worker Download Engine (15–45+ MB/s)
+- Opens **16 parallel MTProto TCP sockets per file** (up to 80 total streams across 5 files) directly connected to Telegram Data Centers (`dcId`), bypassing single-connection rate caps.
 - Uses **512 KB request payloads** (8x larger than default 64 KB chunks), reducing network round-trip overhead by 87%.
-- Supports **multi-file parallel queue processing** (24+ simultaneous TCP streams).
 
-### 2. 🔗 Telegram Link Range Parsing
+### 4. 🔗 Telegram Link Range Parsing
 - Support for direct Telegram post URLs (e.g. `https://t.me/c/3429930878/642` or `https://t.me/channel_name/1200`).
 - Paste links into **From** and **To** range fields to download exact message spans automatically.
 
-### 3. 🔁 Unlimited Full-Channel Auto-Sync
-- **Continuous Pagination**: Automatically pages through complete channel history (from 80 to 80,000+ files) without truncation or page cutoffs.
-- **60-Second Auto-Sync**: Background worker periodically polls all tracked channels for newly posted videos, photos, and files.
-
-### 4. 🔑 Seamless 3-Step Authentication Flow
-- Smooth, uninterrupted step-by-step login (Credentials $\rightarrow$ Telegram App OTP $\rightarrow$ 2FA Password) without modal popups closing mid-login.
-- Automatically saves and reloads your API keys securely.
-
-### 5. ⚡ Deterministic Sequential Ordering
-- Automatically prefixes downloaded files with ordered sequence numbers (`001_`, `002_`, `003_`).
-- Preserves exact Telegram message chronology so multi-part courses, video series, and document archives remain in order.
-
-### 6. 📡 Isolated Per-Channel Dashboard
-- Dedicated card view per channel with real-time download speeds (`↓ MB/s`), ETAs, byte progress bars, and status counters (`✓ done`, `⬇ active`, `⏱ queued`, `⏸ paused`, `✗ failed`).
-
-### 7. ⏸️ Byte-Offset Resume & Retry Controls
-- Instant transfer abortion with byte-offset resumption from existing `.part` files.
-- Retry failed items individually or via bulk `Retry All Failed`.
+### 5. 🔁 GramJS Channel Entity Resolver & Auto-Sync
+- Automatically resolves private channel entity hashes (`-100` prefix) and pre-warms entity cache on app startup so resume/retry works seamlessly across app restarts.
+- **Continuous Pagination**: Automatically pages through complete channel history (from 80 to 80,000+ files) without truncation.
 
 ---
 
-## 📦 Downloads (Version 1.0.3)
+## 📦 Downloads (Version 1.0.4)
 
-Download the latest pre-compiled binaries for your operating system from [GitHub Releases](https://github.com/geekykalpesh/TeleFlow/releases/tag/v1.0.3):
+Download the latest pre-compiled binaries for your operating system from [GitHub Releases](https://github.com/geekykalpesh/TeleFlow/releases/tag/v1.0.4):
 
 | Platform | Format | File Name | Description |
 |---|---|---|---|
-| 🪟 **Windows** | `.exe` | `TeleFlow Setup 1.0.3.exe` | Standard Windows NSIS Installer |
-| 🪟 **Windows** | `.exe` | `TeleFlow 1.0.3.exe` | Portable Executable (No installation required) |
-| 🍎 **macOS** | `.dmg` | `TeleFlow-1.0.3.dmg` | Apple Silicon & Intel macOS Disk Image |
-| 🍎 **macOS** | `.zip` | `TeleFlow-1.0.3-mac.zip` | Portable zipped macOS application bundle |
-| 🐧 **Linux** | `.AppImage` | `TeleFlow-1.0.3.AppImage` | Universal Linux AppImage binary |
-| 🐧 **Linux** | `.deb` | `teleflow_1.0.3_amd64.deb` | Debian / Ubuntu installer package |
+| 🪟 **Windows** | `.exe` | `TeleFlow Setup 1.0.4.exe` | Standard Windows NSIS Installer |
+| 🪟 **Windows** | `.exe` | `TeleFlow 1.0.4.exe` | Portable Executable (No installation required) |
+| 🍎 **macOS** | `.dmg` | `TeleFlow-1.0.4.dmg` | Apple Silicon & Intel macOS Disk Image |
+| 🍎 **macOS** | `.zip` | `TeleFlow-1.0.4-mac.zip` | Portable zipped macOS application bundle |
+| 🐧 **Linux** | `.AppImage` | `TeleFlow-1.0.4.AppImage` | Universal Linux AppImage binary |
+| 🐧 **Linux** | `.deb` | `teleflow_1.0.4_amd64.deb` | Debian / Ubuntu installer package |
 
 ---
 
