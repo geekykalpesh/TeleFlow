@@ -116,6 +116,16 @@ class DbService {
 
     // Reset DOWNLOADING items back to QUEUED on startup to handle crash recovery cleanly
     this.db.run(`UPDATE download_items SET status = 'QUEUED' WHERE status = 'DOWNLOADING'`);
+
+    // Clean up text_content on binary media items (video, photo, document, audio, voice)
+    try {
+      this.db.run(`UPDATE download_items SET text_content = NULL WHERE media_type NOT IN ('text', 'link')`);
+      // Reset any binary media items that were mistakenly marked COMPLETED with partial/fake text size back to QUEUED
+      this.db.run(`UPDATE download_items SET status = 'QUEUED', downloaded_bytes = 0 WHERE media_type NOT IN ('text', 'link') AND total_bytes > 512 AND downloaded_bytes < total_bytes`);
+    } catch (e) {
+      console.warn('[DbService] Media cleanup warning:', e);
+    }
+
     this.save();
   }
 

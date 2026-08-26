@@ -192,7 +192,8 @@ export class ScannerService {
       extension = path.extname(filename) || this.getExtensionFromMime(mime_type);
     }
 
-    return { filename, extension, mime_type, size, media_type, text_content: text_content || undefined };
+    const isTextOrLink = media_type === 'text' || media_type === 'link';
+    return { filename, extension, mime_type, size, media_type, text_content: isTextOrLink ? (text_content || undefined) : undefined };
   }
 
   private generateTextTitle(text: string, msgId: number): string {

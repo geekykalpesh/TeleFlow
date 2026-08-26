@@ -125,7 +125,7 @@ export class DownloadManager {
     }
 
     // Handle text / link items directly without MTProto media download
-    if (item.media_type === 'text' || item.media_type === 'link' || item.text_content !== undefined) {
+    if (item.media_type === 'text' || item.media_type === 'link') {
       try {
         const textToSave = item.text_content || '';
         const buffer = Buffer.from(textToSave, 'utf-8');
