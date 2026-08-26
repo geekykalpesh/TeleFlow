@@ -6,7 +6,9 @@ node_modules/
 dist/
 dist-electron/
 out/
-build/
+build/*
+!build/icon.png
+!build/icon.ico
 release/
 
 # Executables & Package Artifacts
