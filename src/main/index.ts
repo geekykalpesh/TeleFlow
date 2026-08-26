@@ -54,6 +54,10 @@ function saveWindowState(win: BrowserWindow): void {
 async function createWindow() {
   const windowState = loadWindowState();
 
+  const rawIconPath = path.join(process.cwd(), 'public', 'logo.png');
+  const fallbackIconPath = path.join(__dirname, '../public/logo.png');
+  const appIcon = fs.existsSync(rawIconPath) ? rawIconPath : fallbackIconPath;
+
   mainWindow = new BrowserWindow({
     width: windowState.width,
     height: windowState.height,
@@ -62,6 +66,7 @@ async function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'TeleFlow',
+    icon: appIcon,
     frame: true,
     titleBarStyle: 'default',
     backgroundColor: '#0c0f17',
