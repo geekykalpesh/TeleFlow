@@ -53,8 +53,10 @@ export class DownloadManager {
 
   public startQueue(): void {
     this.isPaused = false;
-    // Always trigger processQueue regardless of isProcessing guard
-    this.processQueue();
+    // Asynchronously dispatch queue processing off the IPC call stack
+    setImmediate(() => {
+      this.processQueue().catch((err) => console.error('[ProcessQueue Error]:', err));
+    });
   }
 
   public pauseQueue(): void {
