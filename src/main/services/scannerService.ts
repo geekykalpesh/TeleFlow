@@ -231,6 +231,7 @@ export class ScannerService {
     if (!session) throw new Error('Session not found');
 
     const existingItems = dbService.getDownloadItems(sessionId);
+    const deletedTombstones = dbService.getDeletedTombstones(sessionId);
     let maxMessageId = 0;
     let maxSeqNumber = 0;
 
@@ -246,7 +247,7 @@ export class ScannerService {
       0
     );
 
-    const validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId);
+    const validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId && !deletedTombstones.has(msg.id));
     if (validNewMessages.length === 0) {
       return { addedCount: 0, message: `Channel "${session.title}" is up to date.` };
     }

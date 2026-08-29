@@ -114,6 +114,15 @@ class DbService {
       );
     `);
 
+    // Tombstones table to permanently prevent deleted items from reappearing during scan/sync
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS deleted_tombstones (
+        session_id TEXT NOT NULL,
+        message_id INTEGER NOT NULL,
+        PRIMARY KEY(session_id, message_id)
+      );
+    `);
+
     // Enterprise scale indexes for ultra-fast query performance
     try {
       this.db.run(`CREATE INDEX IF NOT EXISTS idx_items_session_seq ON download_items(session_id, sequence_number);`);
@@ -504,6 +513,19 @@ class DbService {
     if (!this.db || !ids || ids.length === 0) return;
     try {
       const formattedIds = ids.map(id => `'${id}'`).join(',');
+      
+      // Store session_id and message_id in deleted_tombstones table before deletion
+      const itemRes = this.db.exec(`SELECT session_id, message_id FROM download_items WHERE id IN (${formattedIds})`);
+      if (itemRes.length && itemRes[0].values) {
+        for (const row of itemRes[0].values) {
+          const sid = String(row[0]);
+          const mid = Number(row[1]);
+          if (sid && mid) {
+            this.db.run(`INSERT OR IGNORE INTO deleted_tombstones (session_id, message_id) VALUES ('${sid}', ${mid})`);
+          }
+        }
+      }
+
       const sessionRes = this.db.exec(`SELECT DISTINCT session_id FROM download_items WHERE id IN (${formattedIds})`);
       const sessionIds: string[] = sessionRes.length && sessionRes[0].values ? sessionRes[0].values.map((r: any) => String(r[0])) : [];
 
@@ -513,6 +535,33 @@ class DbService {
       this.save();
     } catch (err) {
       console.error('[DbService] deleteDownloadItems error:', err);
+    }
+  }
+
+  public getDeletedTombstones(sessionId?: string): Set<number> {
+    if (!this.db) return new Set();
+    let query = `SELECT message_id FROM deleted_tombstones`;
+    if (sessionId) {
+      query += ` WHERE session_id = '${sessionId}'`;
+    }
+    const res = this.db.exec(query);
+    if (!res.length || !res[0].values) return new Set();
+    return new Set(res[0].values.map((r: any) => Number(r[0])));
+  }
+
+  public clearCompletedItems(sessionId?: string): void {
+    if (!this.db) return;
+    try {
+      let query = `SELECT id FROM download_items WHERE status = 'COMPLETED'`;
+      if (sessionId) {
+        query += ` AND session_id = '${sessionId}'`;
+      }
+      const res = this.db.exec(query);
+      if (!res.length || !res[0].values) return;
+      const ids = res[0].values.map((r: any) => String(r[0]));
+      this.deleteDownloadItems(ids);
+    } catch (e) {
+      console.error('[DbService] clearCompletedItems error:', e);
     }
   }
 

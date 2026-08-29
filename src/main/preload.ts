@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setConcurrency: (n: number) => ipcRenderer.invoke('queue:set-concurrency', n),
   deleteSession: (sessionId: string) => ipcRenderer.invoke('db:delete-session', sessionId),
   deleteItems: (ids: string[], deleteFiles: boolean) => ipcRenderer.invoke('db:delete-items', ids, deleteFiles),
+  clearCompletedItems: (sessionId?: string) => ipcRenderer.invoke('db:clear-completed', sessionId),
   clearQueue: () => ipcRenderer.invoke('db:clear-queue'),
   renumberSession: (sessionId: string) => ipcRenderer.invoke('organizer:renumber', sessionId),
 

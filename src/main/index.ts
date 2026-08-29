@@ -321,6 +321,7 @@ function registerIpcHandlers() {
   ipcMain.handle('queue:retry-all-failed', () => { downloadManager.retryAllFailed(); return { success: true }; });
   ipcMain.handle('queue:set-concurrency', (_, n) => downloadManager.setConcurrency(n));
   ipcMain.handle('db:delete-session', (_, id) => dbService.deleteSession(id));
+  ipcMain.handle('db:clear-completed', (_, sessionId?: string) => { dbService.clearCompletedItems(sessionId); return { success: true }; });
   ipcMain.handle('db:delete-items', async (_, ids: string[], deleteFiles: boolean) => {
     if (!ids || ids.length === 0) return { success: true, deletedCount: 0 };
     for (const id of ids) {

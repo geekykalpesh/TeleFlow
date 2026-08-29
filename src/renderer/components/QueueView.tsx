@@ -190,6 +190,14 @@ export const QueueView: React.FC<QueueViewProps> = ({
     onRefresh();
   };
 
+  const handleClearCompleted = async (sessionId?: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (window.confirm('Remove all finished downloads from the queue list? (Files on disk will remain 100% safe)')) {
+      await (window as any).electronAPI?.clearCompletedItems?.(sessionId);
+      onRefresh();
+    }
+  };
+
   // Bulk & Context Menu Deletion Handlers
   const executeDelete = async (itemsToDelete: DownloadItem[], deleteFilesOnDisk: boolean) => {
     if (!itemsToDelete || itemsToDelete.length === 0) return;
@@ -439,6 +447,11 @@ export const QueueView: React.FC<QueueViewProps> = ({
               <button onClick={() => handleOpenPath(activeSession.destination_path)} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
                 <FolderOpen size={15} /> Open Folder
               </button>
+              {sDone > 0 && (
+                <button onClick={e => handleClearCompleted(activeSession.id, e)} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.82rem', gap: '5px', color: '#10b981', borderColor: 'rgba(16,185,129,0.3)' }} title="Remove finished items from queue list (files on disk remain safe)">
+                  <CheckCircle2 size={15} color="#10b981" /> Clear Completed ({sDone})
+                </button>
+              )}
             </div>
           </div>
 
@@ -924,6 +937,11 @@ export const QueueView: React.FC<QueueViewProps> = ({
       {/* Action Row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <h2 style={{ fontSize: '0.98rem', fontWeight: 700, flex: 1 }}>Channel Download Cards</h2>
+        {doneItems > 0 && (
+          <button onClick={e => handleClearCompleted(undefined, e)} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#10b981', borderColor: 'rgba(16,185,129,0.3)' }} title="Remove all completed downloads from list">
+            <CheckCircle2 size={12} color="#10b981" /> Clear Completed ({doneItems})
+          </button>
+        )}
         {failedItems > 0 && (
           <button onClick={async () => { await (window as any).electronAPI?.retryAllFailed?.(); onRefresh(); }}
             className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#f59e0b' }}>
