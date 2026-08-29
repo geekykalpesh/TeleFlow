@@ -24,10 +24,37 @@ export const App: React.FC = () => {
     fetchSessions();
     fetchDownloadItems();
 
+    // High-performance index map for O(1) state updates
+    const itemIndexMap = new Map<string, number>();
+
     // Real-time download progress via IPC
     const unsubscribe = (window as any).electronAPI?.onDownloadProgress?.((data: any) => {
-      setDownloadItems((prev) =>
-        prev.map((item) => {
+      setDownloadItems((prev) => {
+        // Build/update fast index lookup if missing or length changed
+        if (itemIndexMap.size !== prev.length) {
+          itemIndexMap.clear();
+          for (let i = 0; i < prev.length; i++) {
+            itemIndexMap.set(prev[i].id, i);
+          }
+        }
+
+        const idx = itemIndexMap.get(data.id);
+        if (idx !== undefined && idx >= 0 && idx < prev.length && prev[idx].id === data.id) {
+          const next = [...prev];
+          next[idx] = {
+            ...next[idx],
+            status: data.status,
+            downloaded_bytes: data.downloaded_bytes,
+            total_bytes: data.total_bytes,
+            speed_bps: data.speed_bps,
+            error_message: data.error_message,
+            final_path: data.final_path || next[idx].final_path
+          };
+          return next;
+        }
+
+        // Fallback scan
+        return prev.map((item) => {
           if (item.id === data.id) {
             return {
               ...item,
@@ -40,8 +67,9 @@ export const App: React.FC = () => {
             };
           }
           return item;
-        })
-      );
+        });
+      });
+
       // Also refresh sessions to update progress bars
       if (data.status === 'COMPLETED' || data.status === 'FAILED') {
         fetchSessions();
@@ -109,10 +137,10 @@ export const App: React.FC = () => {
 
   const handleToggleQueue = async () => {
     if (isQueueRunning) {
-      await (window as any).electronAPI.pauseQueue();
+      await (window as any).electronAPI.pauseAll();
       setIsQueueRunning(false);
     } else {
-      await (window as any).electronAPI.startQueue();
+      await (window as any).electronAPI.resumeAll();
       setIsQueueRunning(true);
     }
   };

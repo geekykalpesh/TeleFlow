@@ -114,6 +114,12 @@ class DbService {
       );
     `);
 
+    // Enterprise scale indexes for ultra-fast query performance
+    try {
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_items_session_seq ON download_items(session_id, sequence_number);`);
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_items_status_seq ON download_items(status, sequence_number);`);
+    } catch (e) {}
+
     // Reset DOWNLOADING items back to QUEUED on startup to handle crash recovery cleanly
     this.db.run(`UPDATE download_items SET status = 'QUEUED' WHERE status = 'DOWNLOADING'`);
 
@@ -129,7 +135,20 @@ class DbService {
     this.save();
   }
 
+  private saveTimeout: NodeJS.Timeout | null = null;
+
+  public saveDebounced(delayMs: number = 2000): void {
+    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+    this.saveTimeout = setTimeout(() => {
+      this.save();
+    }, delayMs);
+  }
+
   public save(): void {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
     if (!this.db || !this.dbPath) return;
     try {
       const data = this.db.export();
@@ -378,7 +397,11 @@ class DbService {
   public updateItemStatus(id: string, status: string): void {
     if (!this.db) return;
     this.db.run(`UPDATE download_items SET status = '${status}', speed_bps = 0 WHERE id = '${id}'`);
-    this.save();
+    if (status === 'COMPLETED' || status === 'FAILED' || status === 'PAUSED') {
+      this.save();
+    } else {
+      this.saveDebounced(1500);
+    }
   }
 
   public updateItemProgress(id: string, downloadedBytes: number, totalBytes: number, speedBps: number, status: string, error?: string): void {
@@ -394,6 +417,82 @@ class DbService {
     `);
     stmt.run([downloadedBytes, totalBytes, speedBps, status, error || null, completedAt, id]);
     stmt.free();
+
+    if (status === 'COMPLETED' || status === 'FAILED') {
+      this.save();
+    } else {
+      this.saveDebounced(2000);
+    }
+  }
+
+  // Batch Operations
+  public pauseSessionItems(sessionId: string): void {
+    if (!this.db) return;
+    this.db.run(`UPDATE download_items SET status = 'PAUSED', speed_bps = 0 WHERE session_id = '${sessionId}' AND status IN ('QUEUED', 'DOWNLOADING')`);
+    this.save();
+  }
+
+  public resumeSessionItems(sessionId: string): void {
+    if (!this.db) return;
+    this.db.run(`UPDATE download_items SET status = 'QUEUED', speed_bps = 0 WHERE session_id = '${sessionId}' AND status IN ('PAUSED', 'FAILED')`);
+    this.save();
+  }
+
+  public retrySessionItems(sessionId: string): void {
+    if (!this.db) return;
+    this.db.run(`UPDATE download_items SET status = 'QUEUED', speed_bps = 0, error_message = NULL WHERE session_id = '${sessionId}' AND status IN ('FAILED', 'PAUSED')`);
+    this.save();
+  }
+
+  public pauseAllItems(): void {
+    if (!this.db) return;
+    this.db.run(`UPDATE download_items SET status = 'PAUSED', speed_bps = 0 WHERE status IN ('QUEUED', 'DOWNLOADING')`);
+    this.save();
+  }
+
+  public resumeAllItems(): void {
+    if (!this.db) return;
+    this.db.run(`UPDATE download_items SET status = 'QUEUED', speed_bps = 0 WHERE status IN ('PAUSED', 'FAILED')`);
+    this.save();
+  }
+
+  // Selective Multi-Item Controls
+  public pauseSelectedItems(ids: string[]): void {
+    if (!this.db || !ids || ids.length === 0) return;
+    const formattedIds = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+    this.db.run(`UPDATE download_items SET status = 'PAUSED', speed_bps = 0 WHERE id IN (${formattedIds}) AND status IN ('QUEUED', 'DOWNLOADING')`);
+    this.save();
+  }
+
+  public resumeSelectedItems(ids: string[]): void {
+    if (!this.db || !ids || ids.length === 0) return;
+    const formattedIds = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+    this.db.run(`UPDATE download_items SET status = 'QUEUED', speed_bps = 0 WHERE id IN (${formattedIds}) AND status IN ('PAUSED', 'FAILED')`);
+    this.save();
+  }
+
+  public prioritizeSelectedItems(ids: string[]): void {
+    if (!this.db || !ids || ids.length === 0) return;
+    const formattedIds = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+    
+    // Get minimum sequence number among currently QUEUED items
+    const res = this.db.exec(`SELECT MIN(sequence_number) FROM download_items WHERE status = 'QUEUED'`);
+    let minSeq = 1;
+    if (res.length && res[0].values.length && res[0].values[0][0] !== null) {
+      minSeq = Number(res[0].values[0][0]);
+    }
+
+    let startSeq = Math.max(0, minSeq - ids.length - 1);
+    ids.forEach((id) => {
+      startSeq++;
+      const formattedSeq = String(startSeq).padStart(3, '0');
+      this.db!.run(`
+        UPDATE download_items 
+        SET status = 'QUEUED', sequence_number = ${startSeq}, formatted_sequence = '${formattedSeq}'
+        WHERE id = '${id.replace(/'/g, "''")}'
+      `);
+    });
+    this.save();
   }
 
   public deleteSession(sessionId: string): void {
@@ -466,6 +565,14 @@ class DbService {
     return this.getDownloadItems(sessionId);
   }
 
+  public updateItemFinalPath(id: string, finalPath: string): void {
+    if (!this.db) return;
+    const stmt = this.db.prepare(`UPDATE download_items SET final_path = ? WHERE id = ?`);
+    stmt.run([finalPath, id]);
+    stmt.free();
+    this.save();
+  }
+
   // Settings CRUD
   public getSetting(key: string, defaultValue: string = ''): string {
     if (!this.db) return defaultValue;
@@ -480,6 +587,47 @@ class DbService {
     stmt.run([key, value]);
     stmt.free();
     this.save();
+  }
+
+  public getAllSettings(): Record<string, string> {
+    if (!this.db) return {};
+    const res = this.db.exec(`SELECT key, value FROM settings`);
+    if (!res.length) return {};
+    const settings: Record<string, string> = {};
+    for (const row of res[0].values) {
+      settings[row[0] as string] = row[1] as string;
+    }
+    return settings;
+  }
+
+  // Backup & Import
+  public exportBackupJson(): string {
+    const sessions = this.getSessions();
+    const items = this.getDownloadItems();
+    const settings = this.getAllSettings();
+    return JSON.stringify({ version: '1.0', exported_at: new Date().toISOString(), sessions, items, settings }, null, 2);
+  }
+
+  public importBackupJson(jsonContent: string): { success: boolean; importedSessions: number; importedItems: number } {
+    try {
+      const data = JSON.parse(jsonContent);
+      if (!data || !Array.isArray(data.sessions) || !Array.isArray(data.items)) {
+        throw new Error('Invalid TeleFlow backup file format.');
+      }
+      for (const session of data.sessions) {
+        this.createSession(session);
+      }
+      this.addDownloadItems(data.items);
+      if (data.settings && typeof data.settings === 'object') {
+        for (const [k, v] of Object.entries(data.settings)) {
+          this.setSetting(k, String(v));
+        }
+      }
+      return { success: true, importedSessions: data.sessions.length, importedItems: data.items.length };
+    } catch (err: any) {
+      console.error('[DbService] Backup import failed:', err);
+      throw new Error(err.message || 'Failed to import backup JSON');
+    }
   }
 }
 

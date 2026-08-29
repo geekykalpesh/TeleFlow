@@ -46,18 +46,45 @@ export const QueueView: React.FC<QueueViewProps> = ({
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: DownloadItem } | null>(null);
 
-  useEffect(() => {
-    const handleCloseMenu = () => setContextMenu(null);
-    window.addEventListener('click', handleCloseMenu);
-    window.addEventListener('scroll', handleCloseMenu, true);
-    return () => {
-      window.removeEventListener('click', handleCloseMenu);
-      window.removeEventListener('scroll', handleCloseMenu, true);
-    };
-  }, []);
-
   const activeSessionId = internalSessionId;
   const activeSession = sessions.find(s => s.id === activeSessionId);
+
+  // Shortcuts Cheat Sheet Modal State
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        setShowShortcutsModal(prev => !prev);
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        const visibleItems = items.filter(i => {
+          if (activeSessionId && i.session_id !== activeSessionId) return false;
+          if (itemFilter !== 'all' && i.status !== itemFilter) return false;
+          if (searchQuery.trim() !== '') {
+            const q = searchQuery.toLowerCase();
+            return i.original_filename.toLowerCase().includes(q) || String(i.message_id).includes(q);
+          }
+          return true;
+        });
+        setSelectedIds(new Set(visibleItems.map(i => i.id)));
+      } else if (e.key === 'Delete' && selectedIds.size > 0) {
+        e.preventDefault();
+        const sel = items.filter(i => selectedIds.has(i.id));
+        if (window.confirm(`Delete ${sel.length} selected item(s) from list?`)) {
+          executeDelete(sel, false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [items, selectedIds, activeSessionId, itemFilter, searchQuery]);
 
   // Sync state
   const [syncingSessionId, setSyncingSessionId] = useState<string | null>(null);
@@ -138,6 +165,31 @@ export const QueueView: React.FC<QueueViewProps> = ({
     (window as any).electronAPI?.openFolder?.(p);
   };
 
+  // Selective Actions Handlers
+  const handlePauseSelected = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    await (window as any).electronAPI?.pauseItems?.(ids);
+    onRefresh();
+  };
+
+  const handleResumeSelected = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    await (window as any).electronAPI?.resumeItems?.(ids);
+    onRefresh();
+  };
+
+  const handlePrioritizeSelected = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    await (window as any).electronAPI?.prioritizeItems?.(ids);
+    onRefresh();
+  };
+
   // Bulk & Context Menu Deletion Handlers
   const executeDelete = async (itemsToDelete: DownloadItem[], deleteFilesOnDisk: boolean) => {
     if (!itemsToDelete || itemsToDelete.length === 0) return;
@@ -177,22 +229,19 @@ export const QueueView: React.FC<QueueViewProps> = ({
   // Session Actions
   const handlePauseSession = async (sessionId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const toStop = items.filter(i => i.session_id === sessionId && (i.status === 'DOWNLOADING' || i.status === 'QUEUED'));
-    for (const item of toStop) await (window as any).electronAPI?.pauseItem?.(item.id);
+    await (window as any).electronAPI?.pauseSession?.(sessionId);
     onRefresh();
   };
 
   const handleResumeSession = async (sessionId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const toGo = items.filter(i => i.session_id === sessionId && (i.status === 'PAUSED' || i.status === 'FAILED'));
-    for (const item of toGo) await (window as any).electronAPI?.resumeItem?.(item.id);
+    await (window as any).electronAPI?.resumeSession?.(sessionId);
     onRefresh();
   };
 
   const handleRetrySession = async (sessionId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const toRetry = items.filter(i => i.session_id === sessionId && (i.status === 'FAILED' || i.status === 'PAUSED'));
-    for (const item of toRetry) await (window as any).electronAPI?.retryItem?.(item.id);
+    await (window as any).electronAPI?.retrySession?.(sessionId);
     onRefresh();
   };
 
@@ -1051,24 +1100,28 @@ export const QueueView: React.FC<QueueViewProps> = ({
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
-              onClick={() => {
-                const sel = items.filter(i => selectedIds.has(i.id));
-                for (const item of sel) handlePauseItem(item.id);
-              }}
+              onClick={handlePauseSelected}
               className="btn"
               style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '5px 12px', fontSize: '0.78rem', gap: '4px' }}
+              title="Pause only the selected files"
             >
-              <Pause size={13} /> Pause
+              <Pause size={13} /> Pause Selected
             </button>
             <button
-              onClick={() => {
-                const sel = items.filter(i => selectedIds.has(i.id));
-                for (const item of sel) handleResumeItem(item.id);
-              }}
+              onClick={handleResumeSelected}
               className="btn btn-primary"
               style={{ padding: '5px 12px', fontSize: '0.78rem', gap: '4px' }}
+              title="Resume downloading selected files"
             >
-              <Play size={13} /> Resume
+              <Play size={13} /> Resume Selected
+            </button>
+            <button
+              onClick={handlePrioritizeSelected}
+              className="btn"
+              style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.4)', padding: '5px 12px', fontSize: '0.78rem', fontWeight: 600, gap: '4px' }}
+              title="Move selected files to the top of the queue to download first"
+            >
+              <Zap size={13} /> Download Selected First
             </button>
             <button
               onClick={() => {
@@ -1158,10 +1211,30 @@ export const QueueView: React.FC<QueueViewProps> = ({
 
           <div style={{ height: '1px', background: '#334155', margin: '4px 0' }} />
 
+          {(contextMenu.item.status === 'QUEUED' || contextMenu.item.status === 'PAUSED' || contextMenu.item.status === 'FAILED') && (
+            <button
+              onClick={() => {
+                const targetIds = selectedIds.size > 0 && selectedIds.has(contextMenu.item.id)
+                  ? Array.from(selectedIds)
+                  : [contextMenu.item.id];
+                (window as any).electronAPI?.prioritizeItems?.(targetIds);
+                setContextMenu(null);
+                onRefresh();
+              }}
+              style={{ width: '100%', background: 'none', border: 'none', color: '#c084fc', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left', fontWeight: 600 }}
+            >
+              <Zap size={14} color="#c084fc" /> Download First (Prioritize)
+            </button>
+          )}
+
           {(contextMenu.item.status === 'DOWNLOADING' || contextMenu.item.status === 'QUEUED') && (
             <button
               onClick={() => {
-                handlePauseItem(contextMenu.item.id);
+                const targetIds = selectedIds.size > 0 && selectedIds.has(contextMenu.item.id)
+                  ? Array.from(selectedIds)
+                  : [contextMenu.item.id];
+                if (targetIds.length > 1) handlePauseSelected();
+                else handlePauseItem(contextMenu.item.id);
                 setContextMenu(null);
               }}
               style={{ width: '100%', background: 'none', border: 'none', color: '#f59e0b', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
@@ -1170,27 +1243,19 @@ export const QueueView: React.FC<QueueViewProps> = ({
             </button>
           )}
 
-          {contextMenu.item.status === 'PAUSED' && (
+          {(contextMenu.item.status === 'PAUSED' || contextMenu.item.status === 'FAILED') && (
             <button
               onClick={() => {
-                handleResumeItem(contextMenu.item.id);
+                const targetIds = selectedIds.size > 0 && selectedIds.has(contextMenu.item.id)
+                  ? Array.from(selectedIds)
+                  : [contextMenu.item.id];
+                if (targetIds.length > 1) handleResumeSelected();
+                else handleResumeItem(contextMenu.item.id);
                 setContextMenu(null);
               }}
               style={{ width: '100%', background: 'none', border: 'none', color: '#00d4ff', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
             >
               <Play size={14} /> Resume Download
-            </button>
-          )}
-
-          {contextMenu.item.status === 'FAILED' && (
-            <button
-              onClick={() => {
-                handleRetryItem(contextMenu.item.id);
-                setContextMenu(null);
-              }}
-              style={{ width: '100%', background: 'none', border: 'none', color: '#f87171', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left' }}
-            >
-              <RefreshCw size={14} /> Retry Download
             </button>
           )}
 
@@ -1223,6 +1288,44 @@ export const QueueView: React.FC<QueueViewProps> = ({
           >
             <XCircle size={14} color="#ef4444" /> Delete File & Remove
           </button>
+        </div>
+      )}
+
+      {/* ── Keyboard Shortcuts Cheat Sheet Modal ── */}
+      {showShortcutsModal && (
+        <div className="modal-overlay" onClick={() => setShowShortcutsModal(false)} style={{ zIndex: 99999 }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', padding: '24px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>Keyboard Shortcuts</h3>
+              <button onClick={() => setShowShortcutsModal(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px' }}>
+                <span style={{ color: '#94a3b8' }}>Select All Items in View</span>
+                <kbd style={{ background: '#1e293b', border: '1px solid #475569', padding: '2px 8px', borderRadius: '4px', color: '#00d4ff', fontFamily: 'monospace' }}>Ctrl + A</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px' }}>
+                <span style={{ color: '#94a3b8' }}>Delete Selected Items</span>
+                <kbd style={{ background: '#1e293b', border: '1px solid #475569', padding: '2px 8px', borderRadius: '4px', color: '#f87171', fontFamily: 'monospace' }}>Delete</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px' }}>
+                <span style={{ color: '#94a3b8' }}>Start / Pause Entire Queue</span>
+                <kbd style={{ background: '#1e293b', border: '1px solid #475569', padding: '2px 8px', borderRadius: '4px', color: '#f59e0b', fontFamily: 'monospace' }}>Ctrl + P</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px' }}>
+                <span style={{ color: '#94a3b8' }}>Refresh Sessions & Items</span>
+                <kbd style={{ background: '#1e293b', border: '1px solid #475569', padding: '2px 8px', borderRadius: '4px', color: '#10b981', fontFamily: 'monospace' }}>Ctrl + R</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px' }}>
+                <span style={{ color: '#94a3b8' }}>Open Application Settings</span>
+                <kbd style={{ background: '#1e293b', border: '1px solid #475569', padding: '2px 8px', borderRadius: '4px', color: '#c084fc', fontFamily: 'monospace' }}>Ctrl + ,</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px' }}>
+                <span style={{ color: '#94a3b8' }}>Toggle Shortcuts Cheat Sheet</span>
+                <kbd style={{ background: '#1e293b', border: '1px solid #475569', padding: '2px 8px', borderRadius: '4px', color: '#fff', fontFamily: 'monospace' }}>Shift + ?</kbd>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -11,14 +11,44 @@ export class DownloadManager {
   private isProcessing: boolean = false;
   private isPaused: boolean = false;
   private currentConcurrency: number = 5;
+  private speedLimitBps: number = 0;
+  private autoRetryTimer: NodeJS.Timeout | null = null;
   private mainWindow: BrowserWindow | null = null;
 
   public setMainWindow(win: BrowserWindow | null): void {
     this.mainWindow = win;
+    this.startAutoRetryLoop();
   }
 
   public setConcurrency(concurrency: number): void {
     this.currentConcurrency = Math.max(1, Math.min(16, concurrency));
+  }
+
+  public setSpeedLimit(bytesPerSec: number): void {
+    this.speedLimitBps = Math.max(0, bytesPerSec);
+    dbService.setSetting('max_speed_limit', String(this.speedLimitBps));
+  }
+
+  public getSpeedLimit(): number {
+    if (this.speedLimitBps === 0) {
+      const saved = dbService.getSetting('max_speed_limit', '0');
+      this.speedLimitBps = parseInt(saved, 10) || 0;
+    }
+    return this.speedLimitBps;
+  }
+
+  public startAutoRetryLoop(): void {
+    if (this.autoRetryTimer) return;
+    this.autoRetryTimer = setInterval(() => {
+      if (!this.isPaused) {
+        const items = dbService.getDownloadItems();
+        if (items.some(i => i.status === 'FAILED')) {
+          console.log('[AutoRetry] Retrying failed items in background...');
+          dbService.retryAllFailedItems();
+          this.startQueue();
+        }
+      }
+    }, 300000); // Check every 5 minutes
   }
 
   public startQueue(): void {
@@ -28,7 +58,7 @@ export class DownloadManager {
   }
 
   public pauseQueue(): void {
-    this.isPaused = true;
+    this.pauseAll();
   }
 
   public pauseItem(id: string): void {
@@ -57,6 +87,65 @@ export class DownloadManager {
     const item = dbService.getItemById(id);
     const total = item ? item.total_bytes : 0;
     this.notifyProgress(id, 'QUEUED', 0, total, 0);
+    this.startQueue();
+  }
+
+  public pauseSession(sessionId: string): void {
+    for (const [id] of this.activeDownloads) {
+      const item = dbService.getItemById(id);
+      if (item && item.session_id === sessionId) {
+        telegramClient.abortDownload(id);
+        this.activeDownloads.delete(id);
+      }
+    }
+    dbService.pauseSessionItems(sessionId);
+  }
+
+  public resumeSession(sessionId: string): void {
+    dbService.resumeSessionItems(sessionId);
+    this.startQueue();
+  }
+
+  public retrySession(sessionId: string): void {
+    dbService.retrySessionItems(sessionId);
+    this.startQueue();
+  }
+
+  public pauseAll(): void {
+    this.isPaused = true;
+    for (const [id] of this.activeDownloads) {
+      telegramClient.abortDownload(id);
+    }
+    this.activeDownloads.clear();
+    dbService.pauseAllItems();
+  }
+
+  public resumeAll(): void {
+    this.isPaused = false;
+    dbService.resumeAllItems();
+    this.startQueue();
+  }
+
+  public pauseItems(ids: string[]): void {
+    if (!ids || ids.length === 0) return;
+    for (const id of ids) {
+      if (this.activeDownloads.has(id)) {
+        telegramClient.abortDownload(id);
+        this.activeDownloads.delete(id);
+      }
+    }
+    dbService.pauseSelectedItems(ids);
+  }
+
+  public resumeItems(ids: string[]): void {
+    if (!ids || ids.length === 0) return;
+    dbService.resumeSelectedItems(ids);
+    this.startQueue();
+  }
+
+  public prioritizeItems(ids: string[]): void {
+    if (!ids || ids.length === 0) return;
+    dbService.prioritizeSelectedItems(ids);
     this.startQueue();
   }
 
@@ -222,11 +311,16 @@ export class DownloadManager {
       } else {
         console.error(`[Failed] Item #${item.sequence_number}:`, errMsg);
 
-        // Clean up partial temp file on genuine failure
-        this.cleanupTempFile(item.temp_path);
+        // Preserve partial temp file on failure so resume can pick up from stat.size
+        let preservedBytes = startOffset;
+        if (fs.existsSync(item.temp_path)) {
+          try {
+            preservedBytes = fs.statSync(item.temp_path).size;
+          } catch (e) {}
+        }
 
-        dbService.updateItemProgress(item.id, 0, item.total_bytes, 0, 'FAILED', errMsg);
-        this.notifyProgress(item.id, 'FAILED', 0, item.total_bytes, 0, errMsg);
+        dbService.updateItemProgress(item.id, preservedBytes, item.total_bytes, 0, 'FAILED', errMsg);
+        this.notifyProgress(item.id, 'FAILED', preservedBytes, item.total_bytes, 0, errMsg);
       }
 
     } finally {

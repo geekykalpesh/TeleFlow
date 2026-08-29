@@ -4,6 +4,19 @@ import { dbService } from './dbService';
 import { DownloadItem } from '../../types';
 
 export class FileOrganizer {
+  private safeMoveFile(src: string, dest: string): void {
+    try {
+      fs.renameSync(src, dest);
+    } catch (err: any) {
+      if (err && (err.code === 'EXDEV' || String(err).includes('EXDEV'))) {
+        fs.copyFileSync(src, dest);
+        fs.unlinkSync(src);
+      } else {
+        throw err;
+      }
+    }
+  }
+
   public async finalizeFile(item: DownloadItem): Promise<string> {
     if (!fs.existsSync(item.temp_path)) {
       throw new Error(`Temporary file not found at ${item.temp_path}`);
@@ -23,8 +36,8 @@ export class FileOrganizer {
       targetPath = `${base}_${Date.now()}${ext}`;
     }
 
-    // Atomic move from .temp to final path
-    fs.renameSync(item.temp_path, targetPath);
+    // Safe move supporting cross-device / cross-drive locations
+    this.safeMoveFile(item.temp_path, targetPath);
 
     return targetPath;
   }
@@ -40,8 +53,8 @@ export class FileOrganizer {
         const newFinalPath = path.join(dir, `${item.formatted_sequence}_${originalBase}`);
 
         if (item.final_path !== newFinalPath && !fs.existsSync(newFinalPath)) {
-          fs.renameSync(item.final_path, newFinalPath);
-          dbService.updateItemProgress(item.id, item.downloaded_bytes, item.total_bytes, 0, 'COMPLETED');
+          this.safeMoveFile(item.final_path, newFinalPath);
+          dbService.updateItemFinalPath(item.id, newFinalPath);
         }
       }
     }

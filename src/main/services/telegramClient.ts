@@ -1,6 +1,8 @@
 import { TelegramClient, Api, sessions } from 'telegram';
 const StringSession = sessions.StringSession;
+import bigInt from 'big-integer';
 import { dbService } from './dbService';
+import { downloadManager } from './downloadManager';
 import { TelegramAuthStatus, TelegramChat, TelegramUser, GroupMessageItem, MediaType } from '../../types';
 import path from 'path';
 import fs from 'fs';
@@ -20,6 +22,28 @@ class TelegramClientService {
   // Per-item abort controllers and state for cancellation
   private abortControllers: Map<string, AbortController> = new Map();
   private abortedItemIds: Set<string> = new Set();
+  private entityCache: Map<string, any> = new Map();
+
+  public async handleFloodWait<T>(fn: () => Promise<T>, maxRetries: number = 5): Promise<T> {
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        attempt++;
+        const errMsg = String(err?.errorMessage || err?.message || err);
+        const match = errMsg.match(/FLOOD_WAIT_(\d+)/i) || (err?.seconds ? [null, String(err.seconds)] : null);
+        if (match && match[1]) {
+          const waitSecs = parseInt(match[1], 10) || 5;
+          console.warn(`[TelegramClient] Rate limited (FLOOD_WAIT_${waitSecs}s). Pausing automatically before retry...`);
+          await new Promise((resolve) => setTimeout(resolve, (waitSecs + 1) * 1000));
+        } else {
+          throw err;
+        }
+      }
+    }
+    throw new Error('Max FLOOD_WAIT retries exceeded');
+  }
 
 
   public getStatus(): TelegramAuthStatus {
@@ -386,6 +410,9 @@ class TelegramClientService {
 
   public async resolveEntity(chatId: string) {
     if (!this.client) throw new Error('Telegram client is not connected.');
+    if (this.entityCache.has(chatId)) {
+      return this.entityCache.get(chatId);
+    }
 
     let targetId: any = chatId;
     // If raw numeric string without prefix (e.g. "3429930878"), add -100 prefix so GramJS knows it is a Channel, not a User
@@ -394,7 +421,9 @@ class TelegramClientService {
     }
 
     try {
-      return await this.client.getEntity(targetId);
+      const entity = await this.client.getEntity(targetId);
+      if (entity) this.entityCache.set(chatId, entity);
+      return entity;
     } catch (err: any) {
       console.warn(`[EntityResolver] Initial resolution failed for ${targetId} (${err.message}). Pre-warming dialogs cache...`);
 
@@ -406,10 +435,14 @@ class TelegramClientService {
       }
 
       try {
-        return await this.client.getEntity(targetId);
+        const entity = await this.client.getEntity(targetId);
+        if (entity) this.entityCache.set(chatId, entity);
+        return entity;
       } catch (retryErr) {
         // Fallback to original raw ID
-        return await this.client.getEntity(chatId);
+        const entity = await this.client.getEntity(chatId);
+        if (entity) this.entityCache.set(chatId, entity);
+        return entity;
       }
     }
   }
@@ -522,7 +555,9 @@ class TelegramClientService {
       onProgress,
       checkAborted,
       startOffset,
-      16
+      16,
+      entity,
+      messageId
     );
   }
 
@@ -532,64 +567,150 @@ class TelegramClientService {
     onProgress: (downloadedBytes: number, totalBytes: number) => void,
     checkAborted: () => void,
     startOffset: number = 0,
-    workers: number = 16
+    workers: number = 16,
+    entity?: any,
+    messageId?: number
   ): Promise<void> {
     if (!this.client) throw new Error('Telegram client is not connected.');
     if (!message || !message.media) throw new Error('Message does not contain media.');
 
-    const media = message.media;
-    let location: any = null;
-    let dcId: number | undefined = undefined;
-    let fileSize: number = 0;
-
-    if (media.document && media.document.id) {
-      const doc = media.document;
-      dcId = doc.dcId;
-      fileSize = Number(doc.size || 0);
-      location = new Api.InputDocumentFileLocation({
-        id: doc.id,
-        accessHash: doc.accessHash,
-        fileReference: doc.fileReference,
-        thumbSize: ''
-      });
-    } else if (media.photo && media.photo.id) {
-      const photo = media.photo;
-      dcId = photo.dcId;
-      const largestSize = photo.sizes ? photo.sizes[photo.sizes.length - 1] : null;
-      fileSize = Number(largestSize?.size || 0);
-      location = new Api.InputPhotoFileLocation({
-        id: photo.id,
-        accessHash: photo.accessHash,
-        fileReference: photo.fileReference,
-        thumbSize: largestSize?.type || 'x'
-      });
-    }
-
-    if (!location) {
-      // Fallback to standard downloadMedia if custom location could not be derived
-      await this.client.downloadMedia(message as any, {
-        outputFile: targetTempPath,
-        progressCallback: (downloaded: any, total: any) => {
-          checkAborted();
-          onProgress(Number(downloaded) + startOffset, Number(total));
-        }
-      });
-      return;
-    }
-
-    // HIGH-SPEED PARALLEL MULTI-WORKER DOWNLOAD ENGINE
-    await (this.client as any).downloadFile(location, {
-      dcId,
-      fileSize: fileSize ? (fileSize as any) : undefined,
-      workers: workers,      // 8 parallel MTProto TCP connections
-      partSizeKb: 512,       // Max 512 KB per request chunk (8x payload boost)
-      start: startOffset,    // Resume from existing byte offset
-      outputFile: targetTempPath,
-      progressCallback: (downloaded: any, total: any) => {
-        checkAborted();
-        onProgress(Number(downloaded) + startOffset, Number(total));
+    // Align startOffset down to 4096-byte (4KB) boundary for GramJS/Telegram API compliance
+    let accumulatedBytes = Math.floor(startOffset / 4096) * 4096;
+    if (accumulatedBytes < startOffset && fs.existsSync(targetTempPath)) {
+      try {
+        fs.truncateSync(targetTempPath, accumulatedBytes);
+        console.log(`[DownloadTurbo] Truncated partial file to 4KB aligned offset: ${accumulatedBytes} bytes`);
+      } catch (e) {
+        console.warn('[DownloadTurbo] File alignment truncation warning:', e);
       }
-    } as any);
+    }
+
+    let retries = 0;
+    const maxRetries = 5;
+    let currentMessage = message;
+
+    while (retries < maxRetries) {
+      try {
+        checkAborted();
+
+        const media = currentMessage.media;
+        let location: any = null;
+        let dcId: number | undefined = undefined;
+        let fileSize: number = 0;
+
+        if (media.document && media.document.id) {
+          const doc = media.document;
+          dcId = doc.dcId;
+          fileSize = Number(doc.size || 0);
+          location = new Api.InputDocumentFileLocation({
+            id: doc.id,
+            accessHash: doc.accessHash,
+            fileReference: doc.fileReference,
+            thumbSize: ''
+          });
+        } else if (media.photo && media.photo.id) {
+          const photo = media.photo;
+          dcId = photo.dcId;
+          const largestSize = photo.sizes ? photo.sizes[photo.sizes.length - 1] : null;
+          fileSize = Number(largestSize?.size || 0);
+          location = new Api.InputPhotoFileLocation({
+            id: photo.id,
+            accessHash: photo.accessHash,
+            fileReference: photo.fileReference,
+            thumbSize: largestSize?.type || 'x'
+          });
+        }
+
+        const writeStream = fs.createWriteStream(targetTempPath, {
+          flags: accumulatedBytes > 0 ? 'a' : 'w'
+        });
+
+        try {
+          checkAborted();
+          const iter = this.client.iterDownload({
+            file: location || currentMessage.media || currentMessage,
+            offset: bigInt(accumulatedBytes),
+            requestSize: 512 * 1024,
+            dcId: dcId,
+            fileSize: fileSize ? (bigInt(fileSize) as any) : undefined
+          });
+
+          for await (const chunk of iter as any) {
+            checkAborted();
+
+            // Enforce max download speed throttling if configured
+            const maxSpeedBps = downloadManager.getSpeedLimit();
+            if (maxSpeedBps > 0 && chunk.length > 0) {
+              const delayMs = (chunk.length / maxSpeedBps) * 1000;
+              if (delayMs > 5) {
+                await new Promise((res) => setTimeout(res, Math.min(delayMs, 1000)));
+              }
+            }
+
+            await new Promise<void>((resolve, reject) => {
+              const ok = writeStream.write(chunk, (err) => {
+                if (err) reject(err);
+                else resolve();
+              });
+              if (!ok) {
+                writeStream.once('drain', resolve);
+              }
+            });
+
+            accumulatedBytes += chunk.length;
+            onProgress(accumulatedBytes, fileSize || accumulatedBytes);
+          }
+        } finally {
+          // Asynchronously wait for writeStream to finish writing and flush all bytes to disk
+          await new Promise<void>((resolve) => {
+            writeStream.end(() => resolve());
+          });
+        }
+
+        // Successfully completed chunk iteration without errors
+        break;
+
+      } catch (err: any) {
+        const errMsg = String(err?.errorMessage || err?.message || err);
+
+        // Don't retry if aborted by user
+        if (errMsg.toLowerCase().includes('cancel') || errMsg.toLowerCase().includes('abort')) {
+          throw err;
+        }
+
+        retries++;
+        console.warn(`[DownloadTurbo] Intercepted transfer error (Attempt ${retries}/${maxRetries}) at ${accumulatedBytes} bytes: ${errMsg}`);
+
+        if (retries >= maxRetries) {
+          throw err;
+        }
+
+        // Align byte offset down to 4KB boundary before retry
+        accumulatedBytes = Math.floor(accumulatedBytes / 4096) * 4096;
+        if (fs.existsSync(targetTempPath)) {
+          try {
+            fs.truncateSync(targetTempPath, accumulatedBytes);
+          } catch (e) {}
+        }
+
+        // If file reference expired at ~90%, re-fetch fresh message from Telegram
+        const isRefExpired = /FILE_REFERENCE/i.test(errMsg) || /REF_EXPIRED/i.test(errMsg) || /LOCATION_INVALID/i.test(errMsg);
+        if (isRefExpired && entity && messageId) {
+          console.log(`[DownloadTurbo] File reference expired at ${accumulatedBytes} bytes. Re-fetching fresh media token from Telegram...`);
+          try {
+            const freshMessages = await this.client.getMessages(entity, { ids: [messageId] });
+            if (freshMessages && freshMessages[0] && freshMessages[0].media) {
+              currentMessage = freshMessages[0];
+            }
+          } catch (mErr) {
+            console.warn('[DownloadTurbo] Failed to re-fetch message reference:', mErr);
+          }
+        }
+
+        // Wait 2 seconds before retrying
+        await new Promise((res) => setTimeout(res, 2000));
+      }
+    }
   }
 }
 

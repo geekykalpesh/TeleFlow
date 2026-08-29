@@ -277,6 +277,18 @@ function registerIpcHandlers() {
   ipcMain.handle('auth:sign-in', (_, code) => telegramClient.signIn(code));
   ipcMain.handle('auth:check-password', (_, password) => telegramClient.checkPassword(password));
   ipcMain.handle('auth:logout', () => telegramClient.logout());
+  ipcMain.handle('settings:get-all', () => dbService.getAllSettings());
+  ipcMain.handle('settings:set-default-folder', (_, folderPath: string) => {
+    dbService.setSetting('default_destination', folderPath);
+    return true;
+  });
+  ipcMain.handle('settings:set-speed-limit', (_, bps: number) => {
+    downloadManager.setSpeedLimit(bps);
+    return true;
+  });
+  ipcMain.handle('settings:get-speed-limit', () => downloadManager.getSpeedLimit());
+  ipcMain.handle('backup:export', () => dbService.exportBackupJson());
+  ipcMain.handle('backup:import', (_, jsonContent: string) => dbService.importBackupJson(jsonContent));
 
   // --- Dialogs & Scanner & Search ---
   ipcMain.handle('telegram:get-dialogs', () => telegramClient.getDialogs());
@@ -298,6 +310,14 @@ function registerIpcHandlers() {
   ipcMain.handle('queue:pause-item', (_, id) => downloadManager.pauseItem(id));
   ipcMain.handle('queue:resume-item', (_, id) => downloadManager.resumeItem(id));
   ipcMain.handle('queue:retry-item', (_, id) => downloadManager.retryItem(id));
+  ipcMain.handle('queue:pause-session', (_, sessionId) => downloadManager.pauseSession(sessionId));
+  ipcMain.handle('queue:resume-session', (_, sessionId) => downloadManager.resumeSession(sessionId));
+  ipcMain.handle('queue:retry-session', (_, sessionId) => downloadManager.retrySession(sessionId));
+  ipcMain.handle('queue:pause-all', () => downloadManager.pauseAll());
+  ipcMain.handle('queue:resume-all', () => downloadManager.resumeAll());
+  ipcMain.handle('queue:pause-items', (_, ids: string[]) => downloadManager.pauseItems(ids));
+  ipcMain.handle('queue:resume-items', (_, ids: string[]) => downloadManager.resumeItems(ids));
+  ipcMain.handle('queue:prioritize-items', (_, ids: string[]) => downloadManager.prioritizeItems(ids));
   ipcMain.handle('queue:retry-all-failed', () => downloadManager.retryAllFailed());
   ipcMain.handle('queue:set-concurrency', (_, n) => downloadManager.setConcurrency(n));
   ipcMain.handle('db:delete-session', (_, id) => dbService.deleteSession(id));

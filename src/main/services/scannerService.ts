@@ -93,7 +93,7 @@ export class ScannerService {
       downloadItems.push({
         id: `item_${sessionId}_${msg.id}`,
         session_id: sessionId,
-        chat_id: chat_id,
+        chat_id: effectiveChatId,
         chat_title: chat_title,
         message_id: msg.id,
         sequence_number: seqNumber,
@@ -117,7 +117,7 @@ export class ScannerService {
     const session: DownloadSession = {
       id: sessionId,
       title: session_title,
-      chat_id,
+      chat_id: effectiveChatId,
       chat_title,
       from_message_id,
       to_message_id,
@@ -327,11 +327,11 @@ export class ScannerService {
   }
 
   private sanitizeFilename(name: string): string {
-    return name.replace(/[\\/:*?"<>|]/g, '_');
+    return name.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim().replace(/\.+$/, '');
   }
 
   private sanitizeFolderName(name: string): string {
-    return name.replace(/[\\/:*?"<>|]/g, '_').trim();
+    return name.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim().replace(/\.+$/, '');
   }
 }
 
