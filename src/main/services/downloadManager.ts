@@ -192,7 +192,12 @@ export class DownloadManager {
       this.downloadSingleItem(nextItem);
     }
 
-    if (this.activeDownloads.size === 0 && !dbService.getNextQueuedItem()) {
+    const remainingQueued = dbService.getNextQueuedItem();
+    if (remainingQueued && this.activeDownloads.size < this.currentConcurrency && !this.isPaused) {
+      setTimeout(() => this.processQueue(), 500);
+    }
+
+    if (this.activeDownloads.size === 0 && !remainingQueued) {
       this.isProcessing = false;
       this.checkAllComplete();
     }
@@ -251,6 +256,10 @@ export class DownloadManager {
     const runToken = `${item.id}_${Date.now()}_${Math.random()}`;
     this.activeTaskTokens.set(item.id, runToken);
     this.activeDownloads.set(item.id, { startTime: Date.now(), lastDownloaded: 0 });
+
+    // Instantly transition item status from QUEUED to DOWNLOADING in SQLite DB
+    dbService.updateItemStatus(item.id, 'DOWNLOADING');
+    this.notifyProgress(item.id, 'DOWNLOADING', item.downloaded_bytes || 0, item.total_bytes || 0, 0);
 
     const taskPromise = (async () => {
       if (item.media_type === 'text' || item.media_type === 'link') {

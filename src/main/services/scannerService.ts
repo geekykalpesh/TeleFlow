@@ -137,6 +137,7 @@ export class ScannerService {
 
     dbService.createSession(session);
     dbService.addDownloadItems(downloadItems);
+    downloadManager.startQueue();
 
     return session;
   }
