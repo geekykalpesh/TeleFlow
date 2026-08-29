@@ -77,6 +77,7 @@ export class DownloadManager {
 
   public resumeItem(id: string): void {
     dbService.updateItemStatus(id, 'QUEUED');
+    dbService.prioritizeSelectedItems([id]);
     const item = dbService.getItemById(id);
     const downloaded = item ? item.downloaded_bytes : 0;
     const total = item ? item.total_bytes : 0;

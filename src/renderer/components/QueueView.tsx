@@ -683,14 +683,14 @@ export const QueueView: React.FC<QueueViewProps> = ({
                           <td style={{ padding: '10px 14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                               {(item.status === 'DOWNLOADING' || item.status === 'QUEUED') && (
-                                <button onClick={e => handlePauseItem(item.id, e)} title="Pause"
-                                  style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', borderRadius: '5px', padding: '3px 8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                <button onClick={e => handlePauseItem(item.id, e)} title="Pause downloading this single file"
+                                  style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', color: '#f59e0b', borderRadius: '5px', padding: '3px 8px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}>
                                   <Pause size={11} /> Pause
                                 </button>
                               )}
                               {item.status === 'PAUSED' && (
-                                <button onClick={e => handleResumeItem(item.id, e)} title="Resume"
-                                  style={{ background: 'rgba(0,212,255,0.12)', border: '1px solid rgba(0,212,255,0.3)', color: '#00d4ff', borderRadius: '5px', padding: '3px 8px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                <button onClick={e => handleResumeItem(item.id, e)} title="Resume & start downloading this single file immediately"
+                                  style={{ background: 'rgba(0,212,255,0.15)', border: '1px solid rgba(0,212,255,0.4)', color: '#00d4ff', borderRadius: '5px', padding: '3px 8px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}>
                                   <Play size={11} /> Resume
                                 </button>
                               )}
