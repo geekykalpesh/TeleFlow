@@ -362,12 +362,16 @@ class DbService {
     };
   }
 
-  public getNextQueuedItem(sessionId?: string): DownloadItem | null {
+  public getNextQueuedItem(sessionId?: string, excludeIds: string[] = []): DownloadItem | null {
 
     if (!this.db) return null;
     let query = `SELECT id, session_id, chat_id, chat_title, message_id, sequence_number, formatted_sequence, media_type, original_filename, extension, mime_type, telegram_file_id, total_bytes, downloaded_bytes, speed_bps, status, temp_path, final_path, error_message, created_at, completed_at, text_content FROM download_items WHERE status = 'QUEUED'`;
     if (sessionId) {
-      query += ` AND session_id = '${sessionId}'`;
+      query += ` AND session_id = '${sessionId.replace(/'/g, "''")}'`;
+    }
+    if (excludeIds && excludeIds.length > 0) {
+      const formatted = excludeIds.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+      query += ` AND id NOT IN (${formatted})`;
     }
     query += ` ORDER BY sequence_number ASC LIMIT 1`;
 

@@ -78,6 +78,7 @@ export class DownloadManager {
   }
 
   public resumeItem(id: string): void {
+    telegramClient.clearAbortState(id);
     dbService.updateItemStatus(id, 'QUEUED');
     dbService.prioritizeSelectedItems([id]);
     const item = dbService.getItemById(id);
@@ -88,6 +89,7 @@ export class DownloadManager {
   }
 
   public retryItem(id: string): void {
+    telegramClient.clearAbortState(id);
     dbService.updateItemStatus(id, 'QUEUED');
     const item = dbService.getItemById(id);
     const total = item ? item.total_bytes : 0;
@@ -107,11 +109,19 @@ export class DownloadManager {
   }
 
   public resumeSession(sessionId: string): void {
+    const items = dbService.getDownloadItems(sessionId);
+    for (const item of items) {
+      telegramClient.clearAbortState(item.id);
+    }
     dbService.resumeSessionItems(sessionId);
     this.startQueue();
   }
 
   public retrySession(sessionId: string): void {
+    const items = dbService.getDownloadItems(sessionId);
+    for (const item of items) {
+      telegramClient.clearAbortState(item.id);
+    }
     dbService.retrySessionItems(sessionId);
     this.startQueue();
   }
@@ -127,6 +137,7 @@ export class DownloadManager {
 
   public resumeAll(): void {
     this.isPaused = false;
+    telegramClient.clearAbortState();
     dbService.resumeAllItems();
     this.startQueue();
   }
@@ -144,6 +155,9 @@ export class DownloadManager {
 
   public resumeItems(ids: string[]): void {
     if (!ids || ids.length === 0) return;
+    for (const id of ids) {
+      telegramClient.clearAbortState(id);
+    }
     dbService.resumeSelectedItems(ids);
     this.startQueue();
   }
@@ -155,6 +169,7 @@ export class DownloadManager {
   }
 
   public retryAllFailed(): void {
+    telegramClient.clearAbortState();
     dbService.retryAllFailedItems();
     this.startQueue();
   }
@@ -166,10 +181,14 @@ export class DownloadManager {
     }
 
     this.isProcessing = true;
+    const attemptedInThisPass = new Set<string>();
 
     while (this.activeDownloads.size < this.currentConcurrency && !this.isPaused) {
-      const nextItem = dbService.getNextQueuedItem();
+      const excludeIds = Array.from(new Set([...this.activeDownloads.keys(), ...attemptedInThisPass]));
+      const nextItem = dbService.getNextQueuedItem(undefined, excludeIds);
       if (!nextItem) break;
+
+      attemptedInThisPass.add(nextItem.id);
       this.downloadSingleItem(nextItem);
     }
 
@@ -211,12 +230,15 @@ export class DownloadManager {
   }
 
   private async downloadSingleItem(item: DownloadItem): Promise<void> {
-    // Check if item is paused or aborted before doing work
+    // Check if item is paused before doing work
     const preItem = dbService.getItemById(item.id);
-    if (preItem?.status === 'PAUSED' || telegramClient.isDownloadAborted(item.id)) {
+    if (preItem?.status === 'PAUSED') {
       console.log(`[Skip] Item #${item.sequence_number} is PAUSED. Skipping.`);
       return;
     }
+
+    // Clear any stale abort flag for this item so download can proceed cleanly
+    telegramClient.clearAbortState(item.id);
 
     // If a previous download task for this item is still aborting/cleaning up, wait for it to finish first
     if (this.activeTaskPromises.has(item.id)) {
@@ -228,6 +250,7 @@ export class DownloadManager {
 
     const runToken = `${item.id}_${Date.now()}_${Math.random()}`;
     this.activeTaskTokens.set(item.id, runToken);
+    this.activeDownloads.set(item.id, { startTime: Date.now(), lastDownloaded: 0 });
 
     const taskPromise = (async () => {
       if (item.media_type === 'text' || item.media_type === 'link') {
@@ -257,7 +280,6 @@ export class DownloadManager {
       }
 
       const startTime = Date.now();
-      this.activeDownloads.set(item.id, { startTime, lastDownloaded: 0 });
 
       // Resume: detect existing temp file size for byte offset
       let startOffset = 0;
@@ -336,14 +358,16 @@ export class DownloadManager {
       } catch (err: any) {
         const errMsg = String(err.message || err);
 
-        // If aborted by user pause, keep status as PAUSED
+        // If aborted by user pause, keep status as PAUSED unless already resumed to QUEUED
         if (errMsg.toLowerCase().includes('cancel') || errMsg.toLowerCase().includes('abort') || telegramClient.isDownloadAborted(item.id)) {
           console.log(`[Paused] Item #${item.sequence_number} download was cancelled by user.`);
           const dbCurr = dbService.getItemById(item.id);
-          const downloaded = dbCurr ? dbCurr.downloaded_bytes : startOffset;
-          const total = dbCurr ? dbCurr.total_bytes : item.total_bytes;
-          dbService.updateItemStatus(item.id, 'PAUSED');
-          this.notifyProgress(item.id, 'PAUSED', downloaded, total, 0);
+          if (dbCurr?.status !== 'QUEUED') {
+            const downloaded = dbCurr ? dbCurr.downloaded_bytes : startOffset;
+            const total = dbCurr ? dbCurr.total_bytes : item.total_bytes;
+            dbService.updateItemStatus(item.id, 'PAUSED');
+            this.notifyProgress(item.id, 'PAUSED', downloaded, total, 0);
+          }
         } else {
           console.error(`[Failed] Item #${item.sequence_number}:`, errMsg);
 

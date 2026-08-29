@@ -516,6 +516,16 @@ class TelegramClientService {
     this.abortControllers.delete(itemId);
   }
 
+  public clearAbortState(itemId?: string): void {
+    if (itemId) {
+      this.abortedItemIds.delete(itemId);
+      this.abortControllers.delete(itemId);
+    } else {
+      this.abortedItemIds.clear();
+      this.abortControllers.clear();
+    }
+  }
+
   public async downloadFileChunk(
     chatId: string,
     messageId: number,
