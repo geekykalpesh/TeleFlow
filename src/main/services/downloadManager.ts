@@ -244,8 +244,18 @@ export class DownloadManager {
     if (fs.existsSync(item.temp_path)) {
       try {
         const stat = fs.statSync(item.temp_path);
-        startOffset = stat.size;
-        console.log(`[Resume] Item #${item.sequence_number} has ${startOffset} bytes already. Resuming...`);
+        // Align offset down to 4096-byte (4KB) boundary for Telegram MTProto API compatibility
+        startOffset = Math.floor(stat.size / 4096) * 4096;
+        console.log(`[Resume] Item #${item.sequence_number} (${item.original_filename}) has ${startOffset}/${item.total_bytes} bytes saved. Resuming from offset ${startOffset}...`);
+
+        // If file already completed 100% on disk in temp folder, finalize immediately
+        if (stat.size >= item.total_bytes && item.total_bytes > 0) {
+          console.log(`[Resume Complete] Item #${item.sequence_number} is already 100% downloaded on disk. Finalizing...`);
+          const finalLocation = await fileOrganizer.finalizeFile(item);
+          dbService.updateItemProgress(item.id, item.total_bytes, item.total_bytes, 0, 'COMPLETED');
+          this.notifyProgress(item.id, 'COMPLETED', item.total_bytes, item.total_bytes, 0, undefined, finalLocation);
+          return;
+        }
       } catch (e) {
         startOffset = 0;
       }

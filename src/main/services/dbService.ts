@@ -126,8 +126,6 @@ class DbService {
     // Clean up text_content on binary media items (video, photo, document, audio, voice)
     try {
       this.db.run(`UPDATE download_items SET text_content = NULL WHERE media_type NOT IN ('text', 'link')`);
-      // Reset any binary media items that were mistakenly marked COMPLETED with partial/fake text size back to QUEUED
-      this.db.run(`UPDATE download_items SET status = 'QUEUED', downloaded_bytes = 0 WHERE media_type NOT IN ('text', 'link') AND total_bytes > 512 AND downloaded_bytes < total_bytes`);
     } catch (e) {
       console.warn('[DbService] Media cleanup warning:', e);
     }
@@ -298,30 +296,47 @@ class DbService {
     const res = this.db.exec(query);
     if (!res.length) return [];
 
-    return res[0].values.map((row: any[]) => ({
-      id: row[0],
-      session_id: row[1],
-      chat_id: row[2],
-      chat_title: row[3],
-      message_id: row[4],
-      sequence_number: row[5],
-      formatted_sequence: row[6],
-      media_type: row[7],
-      original_filename: row[8],
-      extension: row[9],
-      mime_type: row[10],
-      telegram_file_id: row[11],
-      total_bytes: row[12],
-      downloaded_bytes: row[13],
-      speed_bps: row[14],
-      status: row[15],
-      temp_path: row[16],
-      final_path: row[17],
-      error_message: row[18],
-      created_at: row[19],
-      completed_at: row[20],
-      text_content: row[21] || undefined
-    }));
+    return res[0].values.map((row: any[]) => {
+      let downloadedBytes = Number(row[13] || 0);
+      const totalBytes = Number(row[12] || 0);
+      const status = row[15] as string;
+      const tempPath = row[16] as string;
+
+      // Sync saved partial .part file size from disk for uncompleted items
+      if (status !== 'COMPLETED' && tempPath && fs.existsSync(tempPath)) {
+        try {
+          const stat = fs.statSync(tempPath);
+          if (stat.size > downloadedBytes) {
+            downloadedBytes = Math.min(totalBytes > 0 ? totalBytes : stat.size, stat.size);
+          }
+        } catch (e) {}
+      }
+
+      return {
+        id: row[0],
+        session_id: row[1],
+        chat_id: row[2],
+        chat_title: row[3],
+        message_id: row[4],
+        sequence_number: row[5],
+        formatted_sequence: row[6],
+        media_type: row[7],
+        original_filename: row[8],
+        extension: row[9],
+        mime_type: row[10],
+        telegram_file_id: row[11],
+        total_bytes: totalBytes,
+        downloaded_bytes: downloadedBytes,
+        speed_bps: row[14],
+        status: row[15],
+        temp_path: tempPath,
+        final_path: row[17],
+        error_message: row[18],
+        created_at: row[19],
+        completed_at: row[20],
+        text_content: row[21] || undefined
+      };
+    });
   }
 
   public getItemById(id: string): DownloadItem | null {
