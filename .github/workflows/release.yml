@@ -59,22 +59,22 @@ jobs:
 
             ---
 
-            ### ✨ Highlights & Features in v1.0.3
+            ### ✨ Release Notes & Fixes in ${{ github.ref_name }}
 
-            - **⚡ Turbo Multi-Worker Download Engine**: Opens **8 parallel MTProto TCP sockets per file** with 512 KB chunk payloads, yielding download speeds up to **15 MB/s - 45+ MB/s**.
-            - **🔗 Telegram Link Range Parsing**: Paste any Telegram message link (`https://t.me/c/3429930878/642`) into Range selection fields to download exact message spans.
-            - **🔁 Unlimited Full-Channel Auto-Sync**: Automatically pages through complete channel history (80 to 80,000+ files) without truncation or page cutoffs.
-            - **🔑 Seamless 3-Step Login Flow**: Smooth step transitions (Credentials -> Telegram App OTP -> 2FA Password) without modal popups closing mid-login.
-            - **📡 Per-Channel Dashboard Isolation**: Dedicated UI card for every channel with real-time download speeds (`MB/s`), remaining ETAs, and byte progress bars.
+            - **🐛 Fixed Application Freeze on Pause & Resume**: Completely resolved the main process thread freeze when pausing and resuming downloads.
+            - **⚡ Turbo Multi-Worker Download Engine**: Opens **16 parallel MTProto TCP sockets per file** with 512 KB chunk payloads, yielding download speeds up to **15 MB/s - 45+ MB/s**.
+            - **🔗 Telegram Link Range Parsing**: Paste any Telegram message link into Range selection fields to download exact message spans.
+            - **🔁 Unlimited Full-Channel Auto-Sync**: Automatically pages through complete channel history without truncation or page cutoffs.
+            - **🔑 Seamless 3-Step Login Flow**: Smooth step transitions (Credentials -> Telegram App OTP -> 2FA Password).
             - **⏸️ Granular Pause / Resume / Retry**: Instant transfer abortion with byte-offset resumption from existing `.part` files.
 
             ---
 
-            ### 📦 Download Assets (v1.0.3)
+            ### 📦 Download Assets (${{ github.ref_name }})
 
-            - 🪟 **Windows**: `TeleFlow Setup 1.0.3.exe` (NSIS Installer) & `TeleFlow 1.0.3.exe` (Portable)
-            - 🍎 **macOS**: `TeleFlow-1.0.3.dmg` & `TeleFlow-1.0.3-mac.zip`
-            - 🐧 **Linux**: `TeleFlow-1.0.3.AppImage` & `teleflow_1.0.3_amd64.deb`
+            - 🪟 **Windows**: `TeleFlow Setup.exe` (NSIS Installer) & Portable Executable
+            - 🍎 **macOS**: `.dmg` & `-mac.zip`
+            - 🐧 **Linux**: `.AppImage` & `.deb`
           files: |
             release/*/*.exe
             release/*/*.dmg
