@@ -557,7 +557,8 @@ class TelegramClientService {
       startOffset,
       16,
       entity,
-      messageId
+      messageId,
+      itemId
     );
   }
 
@@ -569,7 +570,8 @@ class TelegramClientService {
     startOffset: number = 0,
     workers: number = 16,
     entity?: any,
-    messageId?: number
+    messageId?: number,
+    itemId?: string
   ): Promise<void> {
     if (!this.client) throw new Error('Telegram client is not connected.');
     if (!message || !message.media) throw new Error('Message does not contain media.');
@@ -621,13 +623,16 @@ class TelegramClientService {
           });
         }
 
-        const writeStream = fs.createWriteStream(targetTempPath, {
-          flags: accumulatedBytes > 0 ? 'a' : 'w'
-        });
+        let writeStream: fs.WriteStream | null = null;
+        let iter: any = null;
 
         try {
           checkAborted();
-          const iter = this.client.iterDownload({
+          writeStream = fs.createWriteStream(targetTempPath, {
+            flags: accumulatedBytes > 0 ? 'a' : 'w'
+          });
+
+          iter = this.client.iterDownload({
             file: location || currentMessage.media || currentMessage,
             offset: bigInt(accumulatedBytes),
             requestSize: 512 * 1024,
@@ -636,7 +641,13 @@ class TelegramClientService {
           });
 
           for await (const chunk of iter as any) {
-            checkAborted();
+            // Check abort signal immediately on every chunk
+            if (itemId && (this.abortedItemIds.has(itemId) || this.abortControllers.get(itemId)?.signal.aborted)) {
+              if (iter && typeof iter.return === 'function') {
+                try { await iter.return(); } catch (e) {}
+              }
+              throw new Error('Download cancelled by user');
+            }
 
             // Enforce max download speed throttling if configured
             const maxSpeedBps = downloadManager.getSpeedLimit();
@@ -648,12 +659,12 @@ class TelegramClientService {
             }
 
             await new Promise<void>((resolve, reject) => {
-              const ok = writeStream.write(chunk, (err) => {
+              const ok = writeStream!.write(chunk, (err) => {
                 if (err) reject(err);
                 else resolve();
               });
               if (!ok) {
-                writeStream.once('drain', resolve);
+                writeStream!.once('drain', resolve);
               }
             });
 
@@ -661,10 +672,14 @@ class TelegramClientService {
             onProgress(accumulatedBytes, fileSize || accumulatedBytes);
           }
         } finally {
-          // Asynchronously wait for writeStream to finish writing and flush all bytes to disk
-          await new Promise<void>((resolve) => {
-            writeStream.end(() => resolve());
-          });
+          if (iter && typeof iter.return === 'function') {
+            try { await iter.return(); } catch (e) {}
+          }
+          if (writeStream) {
+            await new Promise<void>((resolve) => {
+              writeStream!.end(() => resolve());
+            });
+          }
         }
 
         // Successfully completed chunk iteration without errors
