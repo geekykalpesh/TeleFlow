@@ -48,7 +48,8 @@ export class ScannerService {
     }
 
     // Process all valid messages in the fetched sequence (files, links, text posts)
-    const validMessages = messages.filter((msg: any) => msg && msg.id);
+    const deletedTombstones = dbService.getDeletedTombstones();
+    const validMessages = messages.filter((msg: any) => msg && msg.id && !deletedTombstones.has(msg.id));
 
     // CRITICAL REQUIREMENT: Sort messages strictly by Telegram message_id ascending
     validMessages.sort((a: any, b: any) => a.id - b.id);
@@ -232,12 +233,17 @@ export class ScannerService {
 
     const existingItems = dbService.getDownloadItems(sessionId);
     const deletedTombstones = dbService.getDeletedTombstones(sessionId);
+    const existingMsgIds = new Set(existingItems.map(i => i.message_id));
+
     let maxMessageId = 0;
     let maxSeqNumber = 0;
 
     for (const item of existingItems) {
       if (item.message_id > maxMessageId) maxMessageId = item.message_id;
       if (item.sequence_number > maxSeqNumber) maxSeqNumber = item.sequence_number;
+    }
+    for (const tId of deletedTombstones) {
+      if (tId > maxMessageId) maxMessageId = tId;
     }
 
     const newMessages = await telegramClient.fetchMessages(
@@ -247,7 +253,7 @@ export class ScannerService {
       0
     );
 
-    const validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId && !deletedTombstones.has(msg.id));
+    const validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId && !existingMsgIds.has(msg.id) && !deletedTombstones.has(msg.id));
     if (validNewMessages.length === 0) {
       return { addedCount: 0, message: `Channel "${session.title}" is up to date.` };
     }
