@@ -13,16 +13,17 @@ export class ScannerService {
     const {
       chat_id,
       chat_title,
+      topic_id,
+      topic_title,
       from_message_id,
       to_message_id,
       media_types,
-      session_title = `Session - ${chat_title}`,
+      session_title = topic_title ? `${chat_title} - ${topic_title}` : `Session - ${chat_title}`,
       destination_path,
       download_mode = 'sequential',
       concurrency = 1
     } = options;
 
-    // Parse potential Telegram message links (e.g. https://t.me/c/3429930878/642)
     const parsedFrom = parseTelegramLink(from_message_id);
     const parsedTo = parseTelegramLink(to_message_id);
 
@@ -32,7 +33,6 @@ export class ScannerService {
 
     let messages: any[] = [];
 
-    // If specific message IDs were selected in UI
     if (options.selected_message_ids && options.selected_message_ids.length > 0) {
       const chunkSize = 200;
       for (let i = 0; i < options.selected_message_ids.length; i += chunkSize) {
@@ -43,31 +43,30 @@ export class ScannerService {
         }
       }
     } else {
-      // Fetch ALL messages in channel / range (limit = 0 -> unlimited full fetch)
-      messages = await telegramClient.fetchMessages(effectiveChatId, effectiveFromId, effectiveToId, 0);
+      // Fetch ALL messages in channel / range / topic (replyTo = topic_id)
+      messages = await telegramClient.fetchMessages(effectiveChatId, effectiveFromId, effectiveToId, 0, topic_id);
     }
 
-    // Process all valid messages in the fetched sequence (files, links, text posts)
     const deletedTombstones = dbService.getDeletedTombstones();
     const validMessages = messages.filter((msg: any) => msg && msg.id && !deletedTombstones.has(msg.id));
 
-    // CRITICAL REQUIREMENT: Sort messages strictly by Telegram message_id ascending
     validMessages.sort((a: any, b: any) => a.id - b.id);
 
-    // Use settings default destination if not provided
     const settingsDefault = dbService.getSetting('default_destination', '');
-    const effectiveDestination = destination_path || settingsDefault ||
-      path.join(app ? app.getPath('downloads') : process.cwd(), 'TeleFlow', this.sanitizeFolderName(chat_title));
-    const defaultBaseDir = effectiveDestination;
+    const baseDownloadsDir = destination_path || settingsDefault || path.join(app ? app.getPath('downloads') : process.cwd(), 'TeleFlow');
 
+    const effectiveDestination = topic_title
+      ? path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title), this.sanitizeFolderName(topic_title))
+      : (destination_path || path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title)));
+
+    const defaultBaseDir = effectiveDestination;
     const tempDir = path.join(defaultBaseDir, '.temp');
 
-    const sessionId = `session_${Date.now()}`;
+    const sessionId = `session_${Date.now()}_${topic_id || 'main'}`;
     const padding = Math.max(3, String(validMessages.length).length);
 
     const downloadItems: DownloadItem[] = [];
 
-    // If user selected specific messages, filter to only those
     const selectedSet = options.selected_message_ids && options.selected_message_ids.length > 0
       ? new Set(options.selected_message_ids)
       : null;
@@ -82,7 +81,7 @@ export class ScannerService {
       const mediaInfo = this.extractMediaDetails(msg);
 
       if (media_types && media_types.length > 0 && !media_types.includes(mediaInfo.media_type)) {
-        return; // Skip if user filtered out this media type
+        return;
       }
 
       const tempFileName = `${sessionId}_${msg.id}.part`;
@@ -96,6 +95,8 @@ export class ScannerService {
         session_id: sessionId,
         chat_id: effectiveChatId,
         chat_title: chat_title,
+        topic_id: topic_id,
+        topic_title: topic_title,
         message_id: msg.id,
         sequence_number: seqNumber,
         formatted_sequence: formattedSeq,
@@ -120,6 +121,9 @@ export class ScannerService {
       title: session_title,
       chat_id: effectiveChatId,
       chat_title,
+      is_forum: !!topic_id,
+      topic_id: topic_id,
+      topic_title: topic_title,
       from_message_id,
       to_message_id,
       destination_path: defaultBaseDir,
@@ -140,6 +144,31 @@ export class ScannerService {
     downloadManager.startQueue();
 
     return session;
+  }
+
+  public async scanAndEnqueueAllTopics(options: ScanOptions): Promise<DownloadSession[]> {
+    const topics = await telegramClient.getForumTopics(options.chat_id);
+    if (!topics || topics.length === 0) {
+      const session = await this.scanAndEnqueue(options);
+      return [session];
+    }
+
+    const sessions: DownloadSession[] = [];
+    for (const topic of topics) {
+      try {
+        const topicSession = await this.scanAndEnqueue({
+          ...options,
+          topic_id: topic.id,
+          topic_title: topic.title,
+          session_title: `${options.chat_title} - ${topic.title}`
+        });
+        sessions.push(topicSession);
+      } catch (err) {
+        console.warn(`[ScannerService] Failed to scan topic "${topic.title}":`, err);
+      }
+    }
+
+    return sessions;
   }
 
   private extractMediaDetails(msg: any): { filename: string; extension: string; mime_type: string; size: number; media_type: MediaType; text_content?: string } {

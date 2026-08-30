@@ -293,11 +293,13 @@ function registerIpcHandlers() {
   // --- Dialogs & Scanner & Search ---
   ipcMain.handle('telegram:get-dialogs', () => telegramClient.getDialogs());
   ipcMain.handle('telegram:search-chats', (_, query) => telegramClient.searchChats(query));
-  ipcMain.handle('telegram:inspect-group-messages', (_, chatId, limit, fromMsgId, toMsgId, offsetId) =>
-    telegramClient.inspectGroupMessages(chatId, limit, fromMsgId, toMsgId, offsetId)
+  ipcMain.handle('telegram:get-forum-topics', (_, chatId) => telegramClient.getForumTopics(chatId));
+  ipcMain.handle('telegram:inspect-group-messages', (_, chatId, limit, fromMsgId, toMsgId, offsetId, replyTo) =>
+    telegramClient.inspectGroupMessages(chatId, limit, fromMsgId, toMsgId, offsetId, replyTo)
   );
 
   ipcMain.handle('scanner:scan-and-enqueue', (_, options) => scannerService.scanAndEnqueue(options));
+  ipcMain.handle('scanner:scan-all-topics', (_, options) => scannerService.scanAndEnqueueAllTopics(options));
   ipcMain.handle('scanner:sync-session', (_, sessionId) => scannerService.syncSession(sessionId));
   ipcMain.handle('scanner:sync-all', () => scannerService.syncAllSessions());
 

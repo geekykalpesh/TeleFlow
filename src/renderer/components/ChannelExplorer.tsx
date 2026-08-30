@@ -78,9 +78,13 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
     }
   };
 
-  // Auto-scan ALL messages in a channel
-  const handleGoInsideGroup = async (chat: TelegramChat) => {
+  const [forumTopics, setForumTopics] = useState<any[]>([]);
+  const [activeTopicId, setActiveTopicId] = useState<number | undefined>(undefined);
+
+  // Auto-scan ALL messages in a channel or topic thread
+  const handleGoInsideGroup = async (chat: TelegramChat, targetTopicId?: number) => {
     setSelectedChat(chat);
+    setActiveTopicId(targetTopicId);
     setLoading(true);
     setError(null);
     setAllMessages([]);
@@ -94,6 +98,17 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
 
     try {
       const api = getApi();
+
+      // Fetch forum topics if group/forum
+      if (!targetTopicId) {
+        try {
+          const tRes = await api.getForumTopics(chat.id);
+          setForumTopics(tRes || []);
+        } catch (e) {
+          setForumTopics([]);
+        }
+      }
+
       const from = fromMsgId ? parseInt(fromMsgId, 10) : undefined;
       const to = toMsgId ? parseInt(toMsgId, 10) : undefined;
 
@@ -107,9 +122,8 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
         setScanProgressText(`Auto-scanning channel history... (${accumulatedItems.length} media files found across ${pageCount * 100} messages)`);
 
         const result: { items: GroupMessageItem[]; hasMore: boolean; oldestMsgId: number | null } =
-          await api.inspectGroupMessages(chat.id, PAGE_SIZE, from, to, currentOffsetId);
+          await api.inspectGroupMessages(chat.id, PAGE_SIZE, from, to, currentOffsetId, targetTopicId);
         const { items, hasMore: more, oldestMsgId: oldest } = result;
-
 
         if (items && items.length > 0) {
           const map = new Map(accumulatedItems.map(m => [m.message_id, m]));
@@ -126,7 +140,6 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
           currentOffsetId = oldest;
         }
 
-        // Hide main initial overlay spinner after 1st batch so content updates live
         if (pageCount === 1) {
           setLoading(false);
         }
@@ -274,6 +287,39 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
     }
   };
 
+  const handleEnqueueAllTopics = async () => {
+    if (!selectedChat) return;
+
+    let targetFolder = customDestination;
+    if (!targetFolder) {
+      try {
+        const api = getApi();
+        const picked = await api.selectDirectory();
+        if (picked) { targetFolder = picked; setCustomDestination(picked); }
+      } catch (e) {}
+    }
+
+    setAddingToQueue(true);
+    setError(null);
+
+    const options: ScanOptions = {
+      chat_id: selectedChat.id,
+      chat_title: selectedChat.title,
+      destination_path: targetFolder || undefined,
+      session_title: `${selectedChat.title}`
+    };
+
+    try {
+      const api = getApi();
+      await api.scanAllTopics(options);
+      await api.startQueue();
+      onSessionCreated();
+    } catch (err: any) {
+      setError(err.message || 'Failed to enqueue all topics');
+      setAddingToQueue(false);
+    }
+  };
+
   const formatSize = (bytes: number) => {
     if (!bytes || bytes === 0) return '—';
     const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
@@ -317,7 +363,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
           </p>
         </div>
         {selectedChat && (
-          <button onClick={() => { setSelectedChat(null); setAllMessages([]); setSelectedMsgIds(new Set()); }} className="btn btn-secondary">
+          <button onClick={() => { setSelectedChat(null); setAllMessages([]); setSelectedMsgIds(new Set()); setForumTopics([]); setActiveTopicId(undefined); }} className="btn btn-secondary">
             <ArrowLeft size={15} /> Back to Search
           </button>
         )}
@@ -348,14 +394,9 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                   <div key={i}>
                     <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>{f.label}</label>
                     <input type="text" placeholder={f.ph} value={f.val} onChange={e => f.set(e.target.value)}
-                      style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '6px 10px', color: '#fff', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }} />
+                      className="input-field" style={{ fontSize: '0.75rem', padding: '6px 10px' }} />
                   </div>
                 ))}
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <p style={{ fontSize: '0.72rem', color: '#38bdf8', lineHeight: '1.4' }}>
-                    💡 Paste Telegram post links (e.g. https://t.me/c/3429930878/642) or message IDs to sync exact message ranges.
-                  </p>
-                </div>
               </div>
             )}
           </div>
@@ -385,11 +426,16 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                 {chats.map((chat) => (
                   <div key={chat.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '14px 16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <div>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: 'rgba(0,212,255,0.12)', color: '#00d4ff', textTransform: 'uppercase' }}>
                           {chat.type}
                         </span>
-                        {chat.username && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '8px' }}>@{chat.username}</span>}
+                        {chat.isForum && (
+                          <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: 'rgba(168,85,247,0.18)', color: '#c084fc', textTransform: 'uppercase' }}>
+                            FORUM
+                          </span>
+                        )}
+                        {chat.username && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '4px' }}>@{chat.username}</span>}
                       </div>
                       {chat.participantsCount ? <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{chat.participantsCount.toLocaleString()} members</span> : null}
                     </div>
@@ -408,6 +454,47 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
       {/* ══ MEDIA STREAM VIEW ══ */}
       {selectedChat && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', overflow: 'hidden' }}>
+
+          {/* ── Forum Topics Bar ── */}
+          {forumTopics.length > 0 && (
+            <div style={{ background: 'rgba(0, 212, 255, 0.07)', border: '1px solid rgba(0, 212, 255, 0.2)', borderRadius: '10px', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#00d4ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  💬 FORUM TOPICS ({forumTopics.length})
+                </span>
+                <button onClick={handleEnqueueAllTopics} className="btn btn-primary" disabled={addingToQueue} style={{ padding: '4px 12px', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                  <FolderPlus size={13} /> Enqueue All Topics (Auto Create Subfolders)
+                </button>
+              </div>
+
+              {/* Topic pills */}
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '90px', overflowY: 'auto' }}>
+                <button
+                  onClick={() => handleGoInsideGroup(selectedChat)}
+                  style={{
+                    padding: '3px 10px', borderRadius: '16px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600,
+                    background: activeTopicId === undefined ? '#00d4ff' : 'rgba(255,255,255,0.08)',
+                    color: activeTopicId === undefined ? '#0c0f17' : 'var(--text-main)', border: 'none'
+                  }}
+                >
+                  🌐 All Messages
+                </button>
+                {forumTopics.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => handleGoInsideGroup(selectedChat, t.id)}
+                    style={{
+                      padding: '3px 10px', borderRadius: '16px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600,
+                      background: activeTopicId === t.id ? '#00d4ff' : 'rgba(255,255,255,0.08)',
+                      color: activeTopicId === t.id ? '#0c0f17' : 'var(--text-main)', border: 'none'
+                    }}
+                  >
+                    💬 {t.title} {t.messagesCount ? `(${t.messagesCount})` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Top Action Bar ── */}
           <div style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

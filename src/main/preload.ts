@@ -21,10 +21,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Dialogs & Scanner
   getDialogs: () => ipcRenderer.invoke('telegram:get-dialogs'),
   searchChats: (query: string) => ipcRenderer.invoke('telegram:search-chats', query),
-  inspectGroupMessages: (chatId: string, limit?: number, fromMsgId?: number, toMsgId?: number, offsetId?: number) =>
-    ipcRenderer.invoke('telegram:inspect-group-messages', chatId, limit, fromMsgId, toMsgId, offsetId),
+  getForumTopics: (chatId: string) => ipcRenderer.invoke('telegram:get-forum-topics', chatId),
+  inspectGroupMessages: (chatId: string, limit?: number, fromMsgId?: number, toMsgId?: number, offsetId?: number, replyTo?: number) =>
+    ipcRenderer.invoke('telegram:inspect-group-messages', chatId, limit, fromMsgId, toMsgId, offsetId, replyTo),
 
   scanAndEnqueue: (options: ScanOptions) => ipcRenderer.invoke('scanner:scan-and-enqueue', options),
+  scanAllTopics: (options: ScanOptions) => ipcRenderer.invoke('scanner:scan-all-topics', options),
   syncSession: (sessionId: string) => ipcRenderer.invoke('scanner:sync-session', sessionId),
   syncAllSessions: () => ipcRenderer.invoke('scanner:sync-all'),
 

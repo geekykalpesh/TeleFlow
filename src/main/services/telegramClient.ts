@@ -3,7 +3,7 @@ const StringSession = sessions.StringSession;
 import bigInt from 'big-integer';
 import { dbService } from './dbService';
 import { downloadManager } from './downloadManager';
-import { TelegramAuthStatus, TelegramChat, TelegramUser, GroupMessageItem, MediaType } from '../../types';
+import { TelegramAuthStatus, TelegramChat, TelegramUser, GroupMessageItem, MediaType, TelegramForumTopic } from '../../types';
 import path from 'path';
 import fs from 'fs';
 
@@ -269,6 +269,7 @@ class TelegramClientService {
         title: d.title || d.name || 'Unnamed Chat',
         username: (d.entity as any)?.username || '',
         type,
+        isForum: !!(d.entity as any)?.forum,
         unreadCount: d.unreadCount || 0,
         hasMedia: true,
         participantsCount: (d.entity as any)?.participantsCount || 0
@@ -294,6 +295,7 @@ class TelegramClientService {
             title: chatEntity.title || 'Unnamed Group',
             username: chatEntity.username || '',
             type,
+            isForum: !!chatEntity.forum,
             unreadCount: 0,
             hasMedia: true,
             participantsCount: chatEntity.participantsCount || 0
@@ -311,24 +313,55 @@ class TelegramClientService {
     }
   }
 
+  public async getForumTopics(chatId: string): Promise<TelegramForumTopic[]> {
+    if (!this.client) throw new Error('Telegram client is not connected.');
+    const entity = await this.resolveEntity(chatId);
+
+    try {
+      const res = await this.client.invoke(
+        new Api.channels.GetForumTopics({
+          channel: entity,
+          offsetDate: 0,
+          offsetId: 0,
+          offsetTopic: 0,
+          limit: 100
+        })
+      ) as any;
+
+      if (!res || !res.topics) return [];
+
+      return res.topics.map((t: any) => ({
+        id: t.id,
+        title: t.title || `Topic #${t.id}`,
+        iconColor: t.iconColor,
+        iconEmojiId: t.iconEmojiId ? t.iconEmojiId.toString() : undefined,
+        topMessageId: t.topMessage,
+        messagesCount: t.totalMessages
+      }));
+    } catch (err: any) {
+      console.warn(`[TelegramClient] Failed to fetch forum topics for ${chatId}:`, err);
+      return [];
+    }
+  }
+
   public async inspectGroupMessages(
     chatId: string,
     limit: number = 100,
     fromMsgId?: number,
     toMsgId?: number,
-    offsetId?: number   // for pagination: pass the smallest message_id from the previous page
+    offsetId?: number,
+    replyTo?: number
   ): Promise<{ items: GroupMessageItem[]; hasMore: boolean; oldestMsgId: number | null }> {
     if (!this.client) throw new Error('Telegram client is not connected.');
 
     const entity = await this.resolveEntity(chatId);
 
-    // GramJS: maxId means "get messages with ID < maxId" (i.e., older messages)
-    // offsetId is the oldest message ID from the previous page — we pass it as maxId to go back further
     const effectiveMaxId = offsetId ?? (toMsgId ? toMsgId + 1 : undefined);
     const effectiveMinId = fromMsgId ? fromMsgId - 1 : undefined;
 
     const messages = await this.client.getMessages(entity, {
       limit,
+      replyTo: replyTo || undefined,
       minId: effectiveMinId,
       maxId: effectiveMaxId
     });
@@ -381,7 +414,8 @@ class TelegramClientService {
         size,
         mime_type,
         text: text_content,
-        text_content
+        text_content,
+        topic_id: replyTo
       });
     }
 
@@ -415,7 +449,6 @@ class TelegramClientService {
     }
 
     let targetId: any = chatId;
-    // If raw numeric string without prefix (e.g. "3429930878"), add -100 prefix so GramJS knows it is a Channel, not a User
     if (/^\d+$/.test(chatId)) {
       targetId = `-100${chatId}`;
     }
@@ -427,7 +460,6 @@ class TelegramClientService {
     } catch (err: any) {
       console.warn(`[EntityResolver] Initial resolution failed for ${targetId} (${err.message}). Pre-warming dialogs cache...`);
 
-      // Populate GramJS internal entity cache from Telegram
       try {
         await this.client.getDialogs({ limit: 100 });
       } catch (dErr) {
@@ -439,7 +471,6 @@ class TelegramClientService {
         if (entity) this.entityCache.set(chatId, entity);
         return entity;
       } catch (retryErr) {
-        // Fallback to original raw ID
         const entity = await this.client.getEntity(chatId);
         if (entity) this.entityCache.set(chatId, entity);
         return entity;
@@ -453,7 +484,7 @@ class TelegramClientService {
     return this.client.getMessages(entity, { ids });
   }
 
-  public async fetchMessages(chatId: string, fromId?: number, toId?: number, limit: number = 0) {
+  public async fetchMessages(chatId: string, fromId?: number, toId?: number, limit: number = 0, replyTo?: number) {
     if (!this.client) throw new Error('Telegram client is not connected.');
     const entity = await this.resolveEntity(chatId);
 
@@ -461,6 +492,7 @@ class TelegramClientService {
     if (limit > 0 && limit <= 500) {
       return this.client.getMessages(entity, {
         limit,
+        replyTo: replyTo || undefined,
         minId: fromId ? fromId - 1 : undefined,
         maxId: toId ? toId + 1 : undefined
       });
@@ -474,6 +506,7 @@ class TelegramClientService {
     while (true) {
       const batch = await this.client.getMessages(entity, {
         limit: 100,
+        replyTo: replyTo || undefined,
         minId: minId,
         maxId: currentOffsetId
       });

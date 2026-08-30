@@ -21,9 +21,21 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [topics, setTopics] = useState<any[]>([]);
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('all');
+  const [loadingTopics, setLoadingTopics] = useState(false);
+
   useEffect(() => {
     loadDialogs();
   }, []);
+
+  useEffect(() => {
+    if (selectedChat) {
+      loadTopics(selectedChat.id);
+    } else {
+      setTopics([]);
+    }
+  }, [selectedChat]);
 
   const getApi = () => {
     const api = (window as any).electronAPI;
@@ -31,6 +43,20 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
       throw new Error('Electron API is not initialized. Please ensure you are running inside TeleFlow.');
     }
     return api;
+  };
+
+  const loadTopics = async (chatId: string) => {
+    setLoadingTopics(true);
+    try {
+      const api = getApi();
+      const res = await api.getForumTopics(chatId);
+      setTopics(res || []);
+      setSelectedTopicId('all');
+    } catch (e) {
+      setTopics([]);
+    } finally {
+      setLoadingTopics(false);
+    }
   };
 
   const loadDialogs = async () => {
@@ -74,9 +100,13 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
     setScanning(true);
     setError(null);
 
+    const chosenTopic = selectedTopicId !== 'all' ? topics.find(t => String(t.id) === selectedTopicId) : undefined;
+
     const options: ScanOptions = {
       chat_id: selectedChat.id,
       chat_title: selectedChat.title,
+      topic_id: chosenTopic ? chosenTopic.id : undefined,
+      topic_title: chosenTopic ? chosenTopic.title : undefined,
       from_message_id: fromMsgId ? parseInt(fromMsgId, 10) : undefined,
       to_message_id: toMsgId ? parseInt(toMsgId, 10) : undefined,
       media_types: mediaTypes,
@@ -87,7 +117,11 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
 
     try {
       const api = getApi();
-      await api.scanAndEnqueue(options);
+      if (topics.length > 0 && selectedTopicId === 'all') {
+        await api.scanAllTopics(options);
+      } else {
+        await api.scanAndEnqueue(options);
+      }
       await api.startQueue();
       onCreated();
       onClose();
@@ -181,6 +215,33 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
               )}
             </div>
           </div>
+
+          {/* Forum Topics Selector */}
+          {selectedChat && topics.length > 0 && (
+            <div style={{ marginBottom: '20px', padding: '12px 14px', background: 'rgba(0, 212, 255, 0.08)', border: '1px solid rgba(0, 212, 255, 0.25)', borderRadius: '8px' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#00d4ff', display: 'block', marginBottom: '8px' }}>
+                💬 FORUM GROUP TOPICS DETECTED ({topics.length} TOPICS)
+              </label>
+              <select
+                value={selectedTopicId}
+                onChange={(e) => setSelectedTopicId(e.target.value)}
+                className="input-field"
+                style={{ width: '100%', background: 'var(--bg-card)', color: '#fff', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px 12px', fontSize: '0.85rem' }}
+              >
+                <option value="all">📂 Download All Topics (Auto Create Sub-Folders)</option>
+                {topics.map((t) => (
+                  <option key={t.id} value={String(t.id)}>
+                    💬 {t.title} ({t.messagesCount || 0} messages)
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                {selectedTopicId === 'all'
+                  ? 'All topics will be scanned and saved into separate subfolders inside the main group folder.'
+                  : 'Only messages from the selected topic thread will be downloaded into its topic folder.'}
+              </p>
+            </div>
+          )}
 
           {/* Step 2: Message Range Filtering */}
           <div style={{ marginBottom: '20px' }}>

@@ -7,6 +7,8 @@ export interface DownloadItem {
   session_id: string;
   chat_id: string;
   chat_title: string;
+  topic_id?: number;
+  topic_title?: string;
   message_id: number;
   sequence_number: number;
   formatted_sequence: string; // e.g. "001"
@@ -32,6 +34,9 @@ export interface DownloadSession {
   title: string;
   chat_id: string;
   chat_title: string;
+  is_forum?: boolean;
+  topic_id?: number;
+  topic_title?: string;
   from_message_id?: number;
   to_message_id?: number;
   destination_path: string;
@@ -62,11 +67,21 @@ export interface TelegramAuthStatus {
   error?: string;
 }
 
+export interface TelegramForumTopic {
+  id: number;
+  title: string;
+  iconColor?: number;
+  iconEmojiId?: string;
+  topMessageId?: number;
+  messagesCount?: number;
+}
+
 export interface TelegramChat {
   id: string;
   title: string;
   username?: string;
   type: 'channel' | 'group' | 'user' | 'chat';
+  isForum?: boolean;
   unreadCount: number;
   hasMedia: boolean;
   participantsCount?: number;
@@ -82,11 +97,15 @@ export interface GroupMessageItem {
   mime_type: string;
   text?: string;
   text_content?: string;
+  topic_id?: number;
 }
 
 export interface ScanOptions {
   chat_id: string;
   chat_title: string;
+  topic_id?: number;
+  topic_title?: string;
+  all_topics?: boolean;
   from_message_id?: number;
   to_message_id?: number;
   limit?: number;
