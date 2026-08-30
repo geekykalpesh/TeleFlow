@@ -48,6 +48,7 @@ class DbService {
     }
 
     this.createTables();
+    this.repairDuplicateSequenceNumbers();
     this.save();
   }
 
@@ -485,24 +486,7 @@ class DbService {
   public prioritizeSelectedItems(ids: string[]): void {
     if (!this.db || !ids || ids.length === 0) return;
     const formattedIds = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
-    
-    // Get minimum sequence number among currently QUEUED items
-    const res = this.db.exec(`SELECT MIN(sequence_number) FROM download_items WHERE status = 'QUEUED'`);
-    let minSeq = 1;
-    if (res.length && res[0].values.length && res[0].values[0][0] !== null) {
-      minSeq = Number(res[0].values[0][0]);
-    }
-
-    let startSeq = Math.max(0, minSeq - ids.length - 1);
-    ids.forEach((id) => {
-      startSeq++;
-      const formattedSeq = String(startSeq).padStart(3, '0');
-      this.db!.run(`
-        UPDATE download_items 
-        SET status = 'QUEUED', sequence_number = ${startSeq}, formatted_sequence = '${formattedSeq}'
-        WHERE id = '${id.replace(/'/g, "''")}'
-      `);
-    });
+    this.db.run(`UPDATE download_items SET status = 'QUEUED' WHERE id IN (${formattedIds})`);
     this.save();
   }
 
@@ -600,20 +584,47 @@ class DbService {
   }
 
   public renumberSessionItems(sessionId: string): DownloadItem[] {
-
     if (!this.db) return [];
     const items = this.getDownloadItems(sessionId);
+    items.sort((a, b) => a.message_id - b.message_id);
+    const padding = Math.max(3, String(items.length).length);
+
     items.forEach((item, index) => {
       const newSeq = index + 1;
-      const formattedSeq = String(newSeq).padStart(3, '0');
+      const formattedSeq = String(newSeq).padStart(padding, '0');
+      const dir = path.dirname(item.final_path);
+      const cleanFilename = item.original_filename || `file_${item.message_id}`;
+      const newFinalPath = path.join(dir, `${formattedSeq}_${cleanFilename}`);
+
       this.db!.run(`
         UPDATE download_items 
-        SET sequence_number = ${newSeq}, formatted_sequence = '${formattedSeq}'
-        WHERE id = '${item.id}'
+        SET sequence_number = ${newSeq}, formatted_sequence = '${formattedSeq}', final_path = '${newFinalPath.replace(/'/g, "''")}'
+        WHERE id = '${item.id.replace(/'/g, "''")}'
       `);
     });
     this.save();
     return this.getDownloadItems(sessionId);
+  }
+
+  public repairDuplicateSequenceNumbers(): void {
+    if (!this.db) return;
+    try {
+      const res = this.db.exec(`
+        SELECT session_id, COUNT(*) as cnt 
+        FROM download_items 
+        GROUP BY session_id, sequence_number 
+        HAVING cnt > 1
+      `);
+      if (res.length && res[0].values.length) {
+        const sessionIds = res[0].values.map(r => String(r[0]));
+        for (const sId of sessionIds) {
+          console.log(`[AutoRepair] Repairing duplicate sequence numbers for session: ${sId}`);
+          this.renumberSessionItems(sId);
+        }
+      }
+    } catch (e) {
+      console.warn('[AutoRepair] Sequence number repair warning:', e);
+    }
   }
 
   public updateItemFinalPath(id: string, finalPath: string): void {
