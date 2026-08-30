@@ -606,31 +606,16 @@ class TelegramClientService {
         checkAborted();
 
         const media = currentMessage.media;
-        let location: any = null;
         let dcId: number | undefined = undefined;
         let fileSize: number = 0;
 
-        if (media.document && media.document.id) {
-          const doc = media.document;
-          dcId = doc.dcId;
-          fileSize = Number(doc.size || 0);
-          location = new Api.InputDocumentFileLocation({
-            id: doc.id,
-            accessHash: doc.accessHash,
-            fileReference: doc.fileReference,
-            thumbSize: ''
-          });
-        } else if (media.photo && media.photo.id) {
-          const photo = media.photo;
-          dcId = photo.dcId;
-          const largestSize = photo.sizes ? photo.sizes[photo.sizes.length - 1] : null;
+        if (media?.document) {
+          dcId = media.document.dcId;
+          fileSize = Number(media.document.size || 0);
+        } else if (media?.photo) {
+          dcId = media.photo.dcId;
+          const largestSize = media.photo.sizes ? media.photo.sizes[media.photo.sizes.length - 1] : null;
           fileSize = Number(largestSize?.size || 0);
-          location = new Api.InputPhotoFileLocation({
-            id: photo.id,
-            accessHash: photo.accessHash,
-            fileReference: photo.fileReference,
-            thumbSize: largestSize?.type || 'x'
-          });
         }
 
         let writeStream: fs.WriteStream | null = null;
@@ -643,7 +628,7 @@ class TelegramClientService {
           });
 
           iter = this.client.iterDownload({
-            file: location || currentMessage.media || currentMessage,
+            file: currentMessage.media || currentMessage,
             offset: bigInt(accumulatedBytes),
             requestSize: 512 * 1024,
             dcId: dcId,

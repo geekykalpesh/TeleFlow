@@ -5,7 +5,11 @@ import { DownloadItem } from '../../types';
 
 export class FileOrganizer {
   public sanitizeFilename(name: string): string {
-    return name.replace(/[\\/:*?"<>|\r\n\t]/g, '_').trim().replace(/\.+$/, '');
+    const ext = path.extname(name);
+    const base = name.slice(0, name.length - ext.length);
+    const cleanBase = base.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim().replace(/\.+$/, '');
+    const truncatedBase = cleanBase.substring(0, 80).trim().replace(/\.+$/, '');
+    return `${truncatedBase}${ext || '.bin'}`;
   }
 
   public sanitizePathFilename(filePath: string): string {

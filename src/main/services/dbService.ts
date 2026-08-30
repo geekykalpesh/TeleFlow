@@ -49,6 +49,7 @@ class DbService {
 
     this.createTables();
     this.repairDuplicateSequenceNumbers();
+    this.repairCorruptedItemPaths();
     this.save();
   }
 
@@ -624,6 +625,41 @@ class DbService {
       }
     } catch (e) {
       console.warn('[AutoRepair] Sequence number repair warning:', e);
+    }
+  }
+
+  public repairCorruptedItemPaths(): void {
+    if (!this.db) return;
+    try {
+      const res = this.db.exec(`
+        SELECT id, final_path, temp_path, original_filename 
+        FROM download_items 
+        WHERE final_path LIKE '%:%' OR final_path LIKE '%|%' OR final_path LIKE '%»%' OR final_path LIKE '%«%'
+      `);
+      if (res.length && res[0].values.length) {
+        for (const row of res[0].values) {
+          const id = String(row[0]);
+          const finalPath = String(row[1]);
+          const originalFilename = String(row[3] || '');
+
+          const dir = path.dirname(finalPath);
+          const filename = path.basename(finalPath);
+          const ext = path.extname(filename);
+          const base = filename.slice(0, filename.length - ext.length);
+          const cleanBase = base.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim().replace(/\.+$/, '').substring(0, 85);
+          const cleanFinalPath = path.join(dir, `${cleanBase}${ext}`);
+          const cleanOriginal = originalFilename.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim().substring(0, 85);
+
+          this.db.run(`
+            UPDATE download_items 
+            SET final_path = '${cleanFinalPath.replace(/'/g, "''")}', original_filename = '${cleanOriginal.replace(/'/g, "''")}'
+            WHERE id = '${id.replace(/'/g, "''")}'
+          `);
+        }
+        this.save();
+      }
+    } catch (e) {
+      console.warn('[DbService] Auto-repair corrupted paths warning:', e);
     }
   }
 
