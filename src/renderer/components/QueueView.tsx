@@ -389,7 +389,7 @@ export const QueueView: React.FC<QueueViewProps> = ({
           padding: '18px 20px', borderRadius: '14px',
           border: `1px solid ${cardAccent}50`,
           boxShadow: isActive ? `0 0 24px ${cardAccent}20` : 'none',
-          display: 'flex', flexDirection: 'column', gap: '14px'
+          display: 'flex', flexDirection: 'column', gap: '14px', flexShrink: 0
         }}>
           {/* Header row */}
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' }}>
@@ -999,7 +999,9 @@ export const QueueView: React.FC<QueueViewProps> = ({
                   borderRadius: '14px', overflow: 'hidden', cursor: 'pointer',
                   border: `1px solid ${cardAccent}45`,
                   transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                  boxShadow: isActive ? `0 0 20px ${cardAccent}18` : 'none'
+                  boxShadow: isActive ? `0 0 20px ${cardAccent}18` : 'none',
+                  flexShrink: 0,
+                  minHeight: '120px'
                 }}
                 onClick={() => handleSelectChannel(session.id)}
               >
