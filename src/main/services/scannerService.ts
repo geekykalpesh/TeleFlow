@@ -55,16 +55,20 @@ export class ScannerService {
     const settingsDefault = dbService.getSetting('default_destination', '');
     const baseDownloadsDir = destination_path || settingsDefault || path.join(app ? app.getPath('downloads') : process.cwd(), 'TeleFlow');
 
-    const effectiveDestination = topic_title
-      ? path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title), this.sanitizeFolderName(topic_title))
-      : (destination_path || path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title)));
+    // Fetch forum topics for this chat to build a topic map
+    let forumTopics: any[] = [];
+    const topicMap = new Map<number, string>();
+    try {
+      forumTopics = await telegramClient.getForumTopics(effectiveChatId);
+      if (forumTopics && forumTopics.length > 0) {
+        forumTopics.forEach(t => topicMap.set(t.id, t.title));
+      }
+    } catch (e) {}
 
-    const defaultBaseDir = effectiveDestination;
-    const tempDir = path.join(defaultBaseDir, '.temp');
+    const isForumGroup = topicMap.size > 0;
+    const topicSeqCounters = new Map<string, number>();
 
     const sessionId = `session_${Date.now()}_${topic_id || 'main'}`;
-    const padding = Math.max(3, String(validMessages.length).length);
-
     const downloadItems: DownloadItem[] = [];
 
     const selectedSet = options.selected_message_ids && options.selected_message_ids.length > 0
@@ -74,29 +78,45 @@ export class ScannerService {
       ? validMessages.filter((msg: any) => selectedSet.has(msg.id))
       : validMessages;
 
-    filteredMessages.forEach((msg: any, index: number) => {
-
-      const seqNumber = index + 1;
-      const formattedSeq = String(seqNumber).padStart(padding, '0');
+    filteredMessages.forEach((msg: any) => {
       const mediaInfo = this.extractMediaDetails(msg);
 
       if (media_types && media_types.length > 0 && !media_types.includes(mediaInfo.media_type)) {
         return;
       }
 
-      const tempFileName = `${sessionId}_${msg.id}.part`;
-      const tempPath = path.join(tempDir, tempFileName);
+      // Determine topic ID and title for this specific message
+      const replyToObj = msg.replyTo;
+      const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId || topic_id;
+      let msgTopicTitle = topic_title;
 
+      if (!msgTopicTitle && msgTopicId && topicMap.has(msgTopicId)) {
+        msgTopicTitle = topicMap.get(msgTopicId);
+      } else if (!msgTopicTitle && isForumGroup) {
+        msgTopicTitle = 'General';
+      }
+
+      // Compute topic subfolder destination path
+      const itemFolder = msgTopicTitle
+        ? path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title), this.sanitizeFolderName(msgTopicTitle))
+        : path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title));
+
+      const topicKey = msgTopicTitle || 'main';
+      const seqNumber = (topicSeqCounters.get(topicKey) || 0) + 1;
+      topicSeqCounters.set(topicKey, seqNumber);
+
+      const formattedSeq = String(seqNumber).padStart(3, '0');
+      const tempPath = path.join(itemFolder, '.temp', `${sessionId}_${msg.id}.part`);
       const finalFileName = `${formattedSeq}_${this.sanitizeFilename(mediaInfo.filename)}`;
-      const finalPath = path.join(defaultBaseDir, finalFileName);
+      const finalPath = path.join(itemFolder, finalFileName);
 
       downloadItems.push({
         id: `item_${sessionId}_${msg.id}`,
         session_id: sessionId,
         chat_id: effectiveChatId,
         chat_title: chat_title,
-        topic_id: topic_id,
-        topic_title: topic_title,
+        topic_id: msgTopicId,
+        topic_title: msgTopicTitle,
         message_id: msg.id,
         sequence_number: seqNumber,
         formatted_sequence: formattedSeq,
@@ -126,9 +146,9 @@ export class ScannerService {
       topic_title: topic_title,
       from_message_id,
       to_message_id,
-      destination_path: defaultBaseDir,
+      destination_path: path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title)),
       add_sequence_prefix: true,
-      sequence_padding: padding,
+      sequence_padding: 3,
       download_mode,
       concurrency,
       created_at: new Date().toISOString(),
