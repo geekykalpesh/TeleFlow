@@ -190,8 +190,11 @@ export class ScannerService {
     if (!filename) {
       extension = media_type === 'text' || media_type === 'link' ? '.txt' : this.getExtensionFromMime(mime_type);
       filename = `telegram_${media_type}_${msg.id}${extension}`;
-    } else if (media_type !== 'text' && media_type !== 'link') {
-      extension = path.extname(filename) || this.getExtensionFromMime(mime_type);
+    } else {
+      filename = this.sanitizeFilename(filename);
+      if (media_type !== 'text' && media_type !== 'link') {
+        extension = path.extname(filename) || this.getExtensionFromMime(mime_type);
+      }
     }
 
     const isTextOrLink = media_type === 'text' || media_type === 'link';

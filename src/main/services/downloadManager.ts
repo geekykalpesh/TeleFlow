@@ -359,6 +359,7 @@ export class DownloadManager {
 
         // Download completed cleanly — move temp file to final destination
         const finalLocation = await fileOrganizer.finalizeFile(item);
+        dbService.updateItemFinalPath(item.id, finalLocation);
 
         dbService.updateItemProgress(item.id, item.total_bytes, item.total_bytes, 0, 'COMPLETED');
         this.notifyProgress(item.id, 'COMPLETED', item.total_bytes, item.total_bytes, 0, undefined, finalLocation);
