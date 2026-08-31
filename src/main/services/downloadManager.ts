@@ -388,8 +388,27 @@ export class DownloadManager {
             } catch (e) {}
           }
 
-          dbService.updateItemProgress(item.id, preservedBytes, item.total_bytes, 0, 'FAILED', errMsg);
-          this.notifyProgress(item.id, 'FAILED', preservedBytes, item.total_bytes, 0, errMsg);
+          const currentRetryCount = ((item as any).retry_count || 0) + 1;
+          const maxRetries = 3;
+
+          if (currentRetryCount <= maxRetries) {
+            const backoffMs = Math.pow(2, currentRetryCount) * 2500; // 5s, 10s, 20s
+            console.log(`[Auto-Retry] Scheduling attempt ${currentRetryCount}/${maxRetries} for Item #${item.sequence_number} in ${backoffMs / 1000}s...`);
+
+            dbService.updateItemProgress(item.id, preservedBytes, item.total_bytes, 0, 'QUEUED', `Auto-retrying (${currentRetryCount}/${maxRetries} in ${backoffMs / 1000}s): ${errMsg}`);
+            this.notifyProgress(item.id, 'QUEUED', preservedBytes, item.total_bytes, 0, `Auto-retrying (${currentRetryCount}/${maxRetries}): ${errMsg}`);
+
+            setTimeout(() => {
+              const checkItem = dbService.getItemById(item.id);
+              if (checkItem && checkItem.status === 'QUEUED') {
+                (checkItem as any).retry_count = currentRetryCount;
+                this.startQueue();
+              }
+            }, backoffMs);
+          } else {
+            dbService.updateItemProgress(item.id, preservedBytes, item.total_bytes, 0, 'FAILED', errMsg);
+            this.notifyProgress(item.id, 'FAILED', preservedBytes, item.total_bytes, 0, errMsg);
+          }
         }
 
       } finally {

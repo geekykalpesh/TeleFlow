@@ -25,6 +25,7 @@ export interface DownloadItem {
   final_path: string;
   text_content?: string;
   error_message?: string;
+  retry_count?: number;
   created_at: string;
   completed_at?: string;
 }

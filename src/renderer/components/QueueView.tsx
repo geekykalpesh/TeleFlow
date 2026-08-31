@@ -3,7 +3,7 @@ import { DownloadItem, DownloadSession } from '../../types';
 import {
   Download, HardDrive, Zap, Trash2, RotateCcw, Play, Pause, ExternalLink,
   AlertTriangle, RefreshCw, FolderOpen, ChevronRight, ArrowLeft,
-  CheckCircle2, Clock, XCircle, Radio, Filter, Search, FolderCheck
+  CheckCircle2, Clock, XCircle, Radio, Filter, Search, FolderCheck, ChevronDown
 } from 'lucide-react';
 
 interface QueueViewProps {
@@ -39,6 +39,17 @@ export const QueueView: React.FC<QueueViewProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(50); // 25, 50, 100, 250, 0=all
   const [jumpPageInput, setJumpPageInput] = useState('');
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
+  const [groupByChannel, setGroupByChannel] = useState(true);
+
+  const toggleGroupExpand = (chatId: string) => {
+    setExpandedGroupIds(prev => {
+      const next = new Set(prev);
+      if (next.has(chatId)) next.delete(chatId);
+      else next.add(chatId);
+      return next;
+    });
+  };
 
   // Multi-selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -937,6 +948,31 @@ export const QueueView: React.FC<QueueViewProps> = ({
       {/* Action Row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <h2 style={{ fontSize: '0.98rem', fontWeight: 700, flex: 1 }}>Channel Download Cards</h2>
+
+        {/* Group View Toggle */}
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: '8px', padding: '2px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <button
+            onClick={() => setGroupByChannel(true)}
+            style={{
+              padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', border: 'none', cursor: 'pointer', fontWeight: 700,
+              background: groupByChannel ? '#00d4ff' : 'transparent',
+              color: groupByChannel ? '#0c0f17' : 'var(--text-muted)'
+            }}
+          >
+            📁 Group Forum Topics
+          </button>
+          <button
+            onClick={() => setGroupByChannel(false)}
+            style={{
+              padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', border: 'none', cursor: 'pointer', fontWeight: 700,
+              background: !groupByChannel ? '#00d4ff' : 'transparent',
+              color: !groupByChannel ? '#0c0f17' : 'var(--text-muted)'
+            }}
+          >
+            📋 Show All Cards ({sessions.length})
+          </button>
+        </div>
+
         {doneItems > 0 && (
           <button onClick={e => handleClearCompleted(undefined, e)} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#10b981', borderColor: 'rgba(16,185,129,0.3)' }} title="Remove all completed downloads from list">
             <CheckCircle2 size={12} color="#10b981" /> Clear Completed ({doneItems})
@@ -968,136 +1004,325 @@ export const QueueView: React.FC<QueueViewProps> = ({
             </p>
           </div>
         ) : (
-          sessions.map(session => {
-            const sessionItems = items.filter(i => i.session_id === session.id);
-            const sTotal = sessionItems.length;
-            const sDone = sessionItems.filter(i => i.status === 'COMPLETED').length;
-            const sFailed = sessionItems.filter(i => i.status === 'FAILED').length;
-            const sPaused = sessionItems.filter(i => i.status === 'PAUSED').length;
-            const sDownloading = sessionItems.filter(i => i.status === 'DOWNLOADING').length;
-            const sQueued = sessionItems.filter(i => i.status === 'QUEUED').length;
+          (() => {
+            const groupedList: Array<{ groupKey: string; chatTitle: string; sessions: DownloadSession[] }> = [];
+            if (groupByChannel) {
+              const map = new Map<string, DownloadSession[]>();
+              sessions.forEach(s => {
+                const k = s.chat_id || s.chat_title;
+                if (!map.has(k)) map.set(k, []);
+                map.get(k)!.push(s);
+              });
+              map.forEach((sessList, k) => {
+                groupedList.push({ groupKey: k, chatTitle: sessList[0].chat_title, sessions: sessList });
+              });
+            } else {
+              sessions.forEach(s => {
+                groupedList.push({ groupKey: s.id, chatTitle: s.chat_title, sessions: [s] });
+              });
+            }
 
-            const sessionSpeed = sessionItems.filter(i => i.status === 'DOWNLOADING').reduce((a, i) => a + (i.speed_bps || 0), 0);
-            const sessionDownloaded = sessionItems.reduce((a, i) => a + (i.downloaded_bytes || 0), 0);
-            const sessionTotal = sessionItems.reduce((a, i) => a + (i.total_bytes || 0), 0);
-            const pct = sessionTotal > 0 ? Math.round((sessionDownloaded / sessionTotal) * 100) : (sTotal > 0 ? Math.round((sDone / sTotal) * 100) : 0);
+            return groupedList.map(group => {
+              const isForumGroup = group.sessions.length > 1;
+              const isExpanded = expandedGroupIds.has(group.groupKey);
 
-            const isComplete = sDone === sTotal && sTotal > 0;
-            const isActive = sDownloading > 0;
-            const isPaused = sPaused > 0 && sDownloading === 0 && sQueued === 0;
-            const hasFailed = sFailed > 0;
-            const canPause = sDownloading > 0 || sQueued > 0;
-            const canResume = sPaused > 0 || hasFailed;
+              if (isForumGroup) {
+                // Aggregate metrics for Forum Group Card
+                const groupItems = items.filter(i => group.sessions.some(s => s.id === i.session_id));
+                const gTotal = groupItems.length;
+                const gDone = groupItems.filter(i => i.status === 'COMPLETED').length;
+                const gFailed = groupItems.filter(i => i.status === 'FAILED').length;
+                const gPaused = groupItems.filter(i => i.status === 'PAUSED').length;
+                const gDownloading = groupItems.filter(i => i.status === 'DOWNLOADING').length;
+                const gQueued = groupItems.filter(i => i.status === 'QUEUED').length;
 
-            const cardAccent = isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#334155';
+                const gSpeed = groupItems.filter(i => i.status === 'DOWNLOADING').reduce((a, i) => a + (i.speed_bps || 0), 0);
+                const gDownloaded = groupItems.reduce((a, i) => a + (i.downloaded_bytes || 0), 0);
+                const gTotalBytes = groupItems.reduce((a, i) => a + (i.total_bytes || 0), 0);
+                const gPct = gTotalBytes > 0 ? Math.round((gDownloaded / gTotalBytes) * 100) : (gTotal > 0 ? Math.round((gDone / gTotal) * 100) : 0);
 
-            return (
-              <div
-                key={session.id}
-                className="glass-panel"
-                style={{
-                  borderRadius: '14px', overflow: 'hidden', cursor: 'pointer',
-                  border: `1px solid ${cardAccent}45`,
-                  transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                  boxShadow: isActive ? `0 0 20px ${cardAccent}18` : 'none',
-                  flexShrink: 0,
-                  minHeight: '120px'
-                }}
-                onClick={() => handleSelectChannel(session.id)}
-              >
-                {/* Accent top line */}
-                <div style={{ height: '3px', background: cardAccent, opacity: 0.9 }} />
+                const gIsComplete = gDone === gTotal && gTotal > 0;
+                const gIsActive = gDownloading > 0;
+                const gIsPaused = gPaused > 0 && gDownloading === 0 && gQueued === 0;
+                const gHasFailed = gFailed > 0;
+                const gAccent = gIsComplete ? '#10b981' : gIsActive ? '#00d4ff' : gIsPaused ? '#f59e0b' : gHasFailed ? '#ef4444' : '#a855f7';
 
-                <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* Row 1 */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
-                      <div style={{
-                        width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0,
-                        background: `linear-gradient(135deg, ${cardAccent}35, ${cardAccent}10)`,
-                        border: `1px solid ${cardAccent}35`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem'
-                      }}>
-                        {isComplete ? '✅' : isActive ? '⬇️' : isPaused ? '⏸️' : hasFailed ? '⚠️' : '📁'}
-                      </div>
+                return (
+                  <div
+                    key={group.groupKey}
+                    className="glass-panel"
+                    style={{
+                      borderRadius: '14px', overflow: 'hidden',
+                      border: `1px solid ${gAccent}50`,
+                      boxShadow: gIsActive ? `0 0 24px ${gAccent}20` : 'none',
+                      flexShrink: 0, transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {/* Top Accent Bar */}
+                    <div style={{ height: '4px', background: `linear-gradient(90deg, ${gAccent}, #00d4ff)` }} />
 
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                          <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {session.title}
-                          </h3>
-                          <span style={{
-                            fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px',
-                            background: isComplete ? 'rgba(16,185,129,0.2)' : isActive ? 'rgba(0,212,255,0.18)' : isPaused ? 'rgba(245,158,11,0.2)' : hasFailed ? 'rgba(239,68,68,0.18)' : 'rgba(100,116,139,0.18)',
-                            color: isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#64748b'
+                    {/* Group Accordion Header */}
+                    <div
+                      style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', cursor: 'pointer' }}
+                      onClick={() => toggleGroupExpand(group.groupKey)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                          <div style={{
+                            width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
+                            background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(0,212,255,0.15))',
+                            border: '1px solid rgba(168,85,247,0.4)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem'
                           }}>
-                            {isComplete ? '✓ COMPLETED' : isActive ? `⬇ DOWNLOADING (${sDownloading})` : isPaused ? '⏸ PAUSED' : hasFailed ? `✗ ${sFailed} FAILED` : 'QUEUED'}
-                          </span>
+                            💬
+                          </div>
+
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', flexWrap: 'wrap' }}>
+                              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: '#fff' }}>
+                                {group.chatTitle}
+                              </h3>
+                              <span style={{
+                                fontSize: '0.66rem', fontWeight: 800, padding: '2px 9px', borderRadius: '20px',
+                                background: 'rgba(168,85,247,0.22)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.4)'
+                              }}>
+                                💬 FORUM SUPERGROUP ({group.sessions.length} TOPICS)
+                              </span>
+                              <span style={{
+                                fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px',
+                                background: gIsComplete ? 'rgba(16,185,129,0.2)' : gIsActive ? 'rgba(0,212,255,0.18)' : gIsPaused ? 'rgba(245,158,11,0.2)' : 'rgba(100,116,139,0.18)',
+                                color: gIsComplete ? '#10b981' : gIsActive ? '#00d4ff' : gIsPaused ? '#f59e0b' : '#64748b'
+                              }}>
+                                {gIsComplete ? '✓ ALL TOPICS DONE' : gIsActive ? `⬇ DOWNLOADING (${gDownloading})` : gIsPaused ? '⏸ PAUSED' : 'QUEUED'}
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0 }}>
+                              Total combined: <strong style={{ color: '#fff' }}>{gDone} / {gTotal} files</strong> completed across {group.sessions.length} topic subfolders
+                            </p>
+                          </div>
                         </div>
-                        <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          📡 {session.chat_title} · <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: '#00d4ff' }}>{session.destination_path}</span>
+
+                        {/* Accordion Expand Action */}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); toggleGroupExpand(group.groupKey); }}
+                            className="btn btn-secondary"
+                            style={{ padding: '6px 14px', fontSize: '0.78rem', gap: '6px', fontWeight: 700, color: '#00d4ff', borderColor: 'rgba(0,212,255,0.3)' }}
+                          >
+                            {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                            {isExpanded ? 'Collapse Topics' : `View ${group.sessions.length} Topics`}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Group Overall Progress Bar */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', marginBottom: '5px' }}>
+                          <div style={{ display: 'flex', gap: '14px', color: 'var(--text-muted)' }}>
+                            <span><strong style={{ color: '#10b981' }}>{gDone}</strong> done</span>
+                            {gDownloading > 0 && <span><strong style={{ color: '#00d4ff' }}>{gDownloading}</strong> downloading</span>}
+                            {gQueued > 0 && <span><strong>{gQueued}</strong> queued</span>}
+                            {gPaused > 0 && <span><strong style={{ color: '#f59e0b' }}>{gPaused}</strong> paused</span>}
+                            {gFailed > 0 && <span><strong style={{ color: '#ef4444' }}>{gFailed}</strong> failed</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', fontFamily: 'var(--font-mono)' }}>
+                            {gSpeed > 0 && <span style={{ color: '#00d4ff', fontWeight: 700 }}>↓ {formatSpeed(gSpeed)}</span>}
+                            <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{formatSize(gDownloaded)} / {formatSize(gTotalBytes)}</span>
+                            <span style={{ fontWeight: 800, color: gAccent }}>{gPct}%</span>
+                          </div>
+                        </div>
+                        <div style={{ height: '7px', background: 'rgba(255,255,255,0.08)', borderRadius: '6px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${gPct}%`, background: `linear-gradient(90deg, ${gAccent}, #00d4ff)`, borderRadius: '6px', transition: 'width 0.4s ease' }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Accordion Body: Topic Cards List */}
+                    {isExpanded && (
+                      <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px', background: 'rgba(0,0,0,0.2)' }}>
+                        <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#c084fc', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          💬 Topic Subfolders in "{group.chatTitle}":
                         </p>
+                        {group.sessions.map(session => {
+                          const sessionItems = items.filter(i => i.session_id === session.id);
+                          const sTotal = sessionItems.length;
+                          const sDone = sessionItems.filter(i => i.status === 'COMPLETED').length;
+                          const sFailed = sessionItems.filter(i => i.status === 'FAILED').length;
+                          const sPaused = sessionItems.filter(i => i.status === 'PAUSED').length;
+                          const sDownloading = sessionItems.filter(i => i.status === 'DOWNLOADING').length;
+                          const sQueued = sessionItems.filter(i => i.status === 'QUEUED').length;
+
+                          const sessionSpeed = sessionItems.filter(i => i.status === 'DOWNLOADING').reduce((a, i) => a + (i.speed_bps || 0), 0);
+                          const sessionDownloaded = sessionItems.reduce((a, i) => a + (i.downloaded_bytes || 0), 0);
+                          const sessionTotal = sessionItems.reduce((a, i) => a + (i.total_bytes || 0), 0);
+                          const pct = sessionTotal > 0 ? Math.round((sessionDownloaded / sessionTotal) * 100) : (sTotal > 0 ? Math.round((sDone / sTotal) * 100) : 0);
+
+                          const isComplete = sDone === sTotal && sTotal > 0;
+                          const isActive = sDownloading > 0;
+                          const isPaused = sPaused > 0 && sDownloading === 0 && sQueued === 0;
+                          const hasFailed = sFailed > 0;
+                          const canPause = sDownloading > 0 || sQueued > 0;
+                          const canResume = sPaused > 0 || hasFailed;
+                          const cardAccent = isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#334155';
+
+                          return (
+                            <div
+                              key={session.id}
+                              style={{
+                                background: 'rgba(255,255,255,0.03)', border: `1px solid ${cardAccent}35`, borderRadius: '10px', padding: '12px 16px',
+                                borderLeft: `4px solid ${cardAccent}`, display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer'
+                              }}
+                              onClick={() => handleSelectChannel(session.id)}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                                <div>
+                                  <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0, color: '#fff' }}>
+                                    📂 {session.topic_title || session.title}
+                                  </h4>
+                                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>
+                                    Folder: <span style={{ fontFamily: 'var(--font-mono)', color: '#00d4ff' }}>{session.destination_path}</span>
+                                  </p>
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                  {canPause && !isComplete && (
+                                    <button onClick={e => handlePauseSession(session.id, e)} style={{ padding: '4px 8px', fontSize: '0.72rem' }} className="btn btn-secondary">
+                                      <Pause size={12} /> Pause
+                                    </button>
+                                  )}
+                                  {canResume && !isComplete && (
+                                    <button onClick={e => handleResumeSession(session.id, e)} style={{ padding: '4px 8px', fontSize: '0.72rem' }} className="btn btn-primary">
+                                      <Play size={12} /> Resume
+                                    </button>
+                                  )}
+                                  <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.72rem' }}>
+                                    Open Topic Page <ChevronRight size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                              <div style={{ height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, transition: 'width 0.3s ease' }} />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
-
-                    {/* Action buttons + Open Page trigger */}
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-                      {canPause && !isComplete && (
-                        <button onClick={e => handlePauseSession(session.id, e)}
-                          style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', color: '#f59e0b', borderRadius: '8px', padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Pause size={13} /> Pause
-                        </button>
-                      )}
-                      {canResume && !isComplete && (
-                        <button onClick={e => handleResumeSession(session.id, e)}
-                          style={{ background: 'rgba(0,212,255,0.12)', border: '1px solid rgba(0,212,255,0.35)', color: '#00d4ff', borderRadius: '8px', padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Play size={13} /> Resume
-                        </button>
-                      )}
-                      {hasFailed && (
-                        <button onClick={e => handleRetrySession(session.id, e)}
-                          style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', borderRadius: '8px', padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <RefreshCw size={13} /> Retry ({sFailed})
-                        </button>
-                      )}
-                      <button onClick={e => handleSyncChannel(session.id, e)} disabled={syncingSessionId === session.id}
-                        style={{ background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.25)', color: '#00d4ff', borderRadius: '8px', padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <RefreshCw size={13} className={syncingSessionId === session.id ? 'spin' : ''} /> {syncingSessionId === session.id ? 'Syncing...' : 'Sync'}
-                      </button>
-
-                      {/* Prominent Open Channel Page button */}
-                      <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-primary"
-                        style={{ padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700 }}>
-                        Open Channel Page <ChevronRight size={14} />
-                      </button>
-
-                    </div>
+                    )}
                   </div>
+                );
+              }
 
-                  {/* Row 2: Progress bar */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', marginBottom: '5px' }}>
-                      <div style={{ display: 'flex', gap: '14px', color: 'var(--text-muted)' }}>
-                        <span><strong style={{ color: '#10b981' }}>{sDone}</strong> done</span>
-                        {sDownloading > 0 && <span><strong style={{ color: '#00d4ff' }}>{sDownloading}</strong> active</span>}
-                        {sQueued > 0 && <span><strong>{sQueued}</strong> queued</span>}
-                        {sPaused > 0 && <span><strong style={{ color: '#f59e0b' }}>{sPaused}</strong> paused</span>}
-                        {sFailed > 0 && <span><strong style={{ color: '#ef4444' }}>{sFailed}</strong> failed</span>}
+              // Standard single channel card
+              const session = group.sessions[0];
+              const sessionItems = items.filter(i => i.session_id === session.id);
+              const sTotal = sessionItems.length;
+              const sDone = sessionItems.filter(i => i.status === 'COMPLETED').length;
+              const sFailed = sessionItems.filter(i => i.status === 'FAILED').length;
+              const sPaused = sessionItems.filter(i => i.status === 'PAUSED').length;
+              const sDownloading = sessionItems.filter(i => i.status === 'DOWNLOADING').length;
+              const sQueued = sessionItems.filter(i => i.status === 'QUEUED').length;
+
+              const sessionSpeed = sessionItems.filter(i => i.status === 'DOWNLOADING').reduce((a, i) => a + (i.speed_bps || 0), 0);
+              const sessionDownloaded = sessionItems.reduce((a, i) => a + (i.downloaded_bytes || 0), 0);
+              const sessionTotal = sessionItems.reduce((a, i) => a + (i.total_bytes || 0), 0);
+              const pct = sessionTotal > 0 ? Math.round((sessionDownloaded / sessionTotal) * 100) : (sTotal > 0 ? Math.round((sDone / sTotal) * 100) : 0);
+
+              const isComplete = sDone === sTotal && sTotal > 0;
+              const isActive = sDownloading > 0;
+              const isPaused = sPaused > 0 && sDownloading === 0 && sQueued === 0;
+              const hasFailed = sFailed > 0;
+              const canPause = sDownloading > 0 || sQueued > 0;
+              const canResume = sPaused > 0 || hasFailed;
+              const cardAccent = isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#334155';
+
+              return (
+                <div
+                  key={session.id}
+                  className="glass-panel"
+                  style={{
+                    borderRadius: '14px', overflow: 'hidden', cursor: 'pointer',
+                    border: `1px solid ${cardAccent}45`,
+                    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                    boxShadow: isActive ? `0 0 20px ${cardAccent}18` : 'none',
+                    flexShrink: 0,
+                    minHeight: '120px'
+                  }}
+                  onClick={() => handleSelectChannel(session.id)}
+                >
+                  <div style={{ height: '3px', background: cardAccent, opacity: 0.9 }} />
+                  <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                        <div style={{
+                          width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0,
+                          background: `linear-gradient(135deg, ${cardAccent}35, ${cardAccent}10)`,
+                          border: `1px solid ${cardAccent}35`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem'
+                        }}>
+                          {isComplete ? '✅' : isActive ? '⬇️' : isPaused ? '⏸️' : hasFailed ? '⚠️' : '📁'}
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                            <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {session.title}
+                            </h3>
+                            <span style={{
+                              fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px',
+                              background: isComplete ? 'rgba(16,185,129,0.2)' : isActive ? 'rgba(0,212,255,0.18)' : isPaused ? 'rgba(245,158,11,0.2)' : hasFailed ? 'rgba(239,68,68,0.18)' : 'rgba(100,116,139,0.18)',
+                              color: isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#64748b'
+                            }}>
+                              {isComplete ? '✓ COMPLETED' : isActive ? `⬇ DOWNLOADING (${sDownloading})` : isPaused ? '⏸ PAUSED' : hasFailed ? `✗ ${sFailed} FAILED` : 'QUEUED'}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            📡 {session.chat_title} · <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: '#00d4ff' }}>{session.destination_path}</span>
+                          </p>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '12px', fontFamily: 'var(--font-mono)' }}>
-                        {sessionSpeed > 0 && <span style={{ color: '#00d4ff', fontWeight: 700 }}>↓ {formatSpeed(sessionSpeed)}</span>}
-                        <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{formatSize(sessionDownloaded)} / {formatSize(sessionTotal)}</span>
-                        <span style={{ fontWeight: 800, color: cardAccent }}>{pct}%</span>
+
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                        {canPause && !isComplete && (
+                          <button onClick={e => handlePauseSession(session.id, e)} style={{ padding: '6px 12px', fontSize: '0.78rem' }} className="btn btn-secondary">
+                            <Pause size={13} /> Pause
+                          </button>
+                        )}
+                        {canResume && !isComplete && (
+                          <button onClick={e => handleResumeSession(session.id, e)} style={{ padding: '6px 12px', fontSize: '0.78rem' }} className="btn btn-primary">
+                            <Play size={13} /> Resume
+                          </button>
+                        )}
+                        <button onClick={e => handleSyncChannel(session.id, e)} disabled={syncingSessionId === session.id} style={{ padding: '6px 12px', fontSize: '0.78rem' }} className="btn btn-secondary">
+                          <RefreshCw size={13} className={syncingSessionId === session.id ? 'spin' : ''} /> {syncingSessionId === session.id ? 'Syncing...' : 'Sync'}
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700 }}>
+                          Open Channel Page <ChevronRight size={14} />
+                        </button>
                       </div>
                     </div>
-                    <div style={{ height: '6px', background: 'rgba(255,255,255,0.07)', borderRadius: '6px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, borderRadius: '6px', transition: 'width 0.4s ease' }} />
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', marginBottom: '5px' }}>
+                        <div style={{ display: 'flex', gap: '14px', color: 'var(--text-muted)' }}>
+                          <span><strong style={{ color: '#10b981' }}>{sDone}</strong> done</span>
+                          {sDownloading > 0 && <span><strong style={{ color: '#00d4ff' }}>{sDownloading}</strong> active</span>}
+                          {sQueued > 0 && <span><strong>{sQueued}</strong> queued</span>}
+                          {sPaused > 0 && <span><strong style={{ color: '#f59e0b' }}>{sPaused}</strong> paused</span>}
+                          {sFailed > 0 && <span><strong style={{ color: '#ef4444' }}>{sFailed}</strong> failed</span>}
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', fontFamily: 'var(--font-mono)' }}>
+                          {sessionSpeed > 0 && <span style={{ color: '#00d4ff', fontWeight: 700 }}>↓ {formatSpeed(sessionSpeed)}</span>}
+                          <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{formatSize(sessionDownloaded)} / {formatSize(sessionTotal)}</span>
+                          <span style={{ fontWeight: 800, color: cardAccent }}>{pct}%</span>
+                        </div>
+                      </div>
+                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.07)', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, borderRadius: '6px', transition: 'width 0.4s ease' }} />
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            });
+          })()
         )}
       </div>
 
