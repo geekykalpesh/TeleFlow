@@ -61,9 +61,9 @@ jobs:
 
             ### ✨ Release Notes & Fixes in ${{ github.ref_name }}
 
+            - **⚡ Parallel Pipelined Multi-Sender Engine (Continuous High-Speed)**: Opens 8 dedicated parallel TCP senders per file to stream 512 KB chunks simultaneously into an ordered in-memory buffer. Completely eliminates ping latency pauses and prevents speeds from dropping to KB/s!
             - **🧹 Clean Release Installer Assets**: Streamlined release binaries to clean single setup installers (`.exe`, `.dmg`, `.AppImage`) and removed all intermediate blockmaps, metadata ymls, and duplicate packages.
             - **🔒 Secure Local Credential Vault**: Zero credentials hardcoded in codebase. Personal sessions are stored strictly on your local PC (`AppData`) and seamlessly preserved across all application updates without re-logging in.
-            - **🚀 Max-Speed Continuous Download Engine**: Persistent 20-connection MTProto DC pool, 4 MB high-throughput disk write buffer, and up to 10 parallel file workers (continuous max ISP bandwidth up to 100+ MB/s).
             - **⚙️ Advanced Content Filtering & Rules Engine**: Filter downloads by Min/Max file size (MB), Include/Exclude keywords matching filenames and captions, and skip duplicate files on disk.
             - **🗑️ Delete Specific Channel Cards**: Added explicit card deletion options for all channel cards & forum topic sub-cards (with choice to remove from list or delete files on disk).
             - **⏸️ Per-Card Download Controls**: Turn downloads ON or OFF per card ("don't want to download them").
