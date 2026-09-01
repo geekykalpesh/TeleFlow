@@ -278,6 +278,10 @@ function registerIpcHandlers() {
   ipcMain.handle('auth:check-password', (_, password) => telegramClient.checkPassword(password));
   ipcMain.handle('auth:logout', () => telegramClient.logout());
   ipcMain.handle('settings:get-all', () => dbService.getAllSettings());
+  ipcMain.handle('settings:set', (_, key: string, value: string) => {
+    dbService.setSetting(key, value);
+    return true;
+  });
   ipcMain.handle('settings:set-default-folder', (_, folderPath: string) => {
     dbService.setSetting('default_destination', folderPath);
     return true;

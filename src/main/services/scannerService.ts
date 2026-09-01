@@ -2,6 +2,7 @@ import { telegramClient } from './telegramClient';
 import { dbService } from './dbService';
 import { DownloadItem, DownloadSession, ScanOptions, MediaType } from '../../types';
 import path from 'path';
+import fs from 'fs';
 import { app } from 'electron';
 import { downloadManager } from './downloadManager';
 import { parseTelegramLink } from '../utils/telegramLink';
@@ -85,6 +86,35 @@ export class ScannerService {
         return;
       }
 
+      // File Size Filter
+      if (options.min_file_size_mb !== undefined && options.min_file_size_mb > 0) {
+        const minBytes = options.min_file_size_mb * 1024 * 1024;
+        if (mediaInfo.size < minBytes) return;
+      }
+      if (options.max_file_size_mb !== undefined && options.max_file_size_mb > 0) {
+        const maxBytes = options.max_file_size_mb * 1024 * 1024;
+        if (mediaInfo.size > maxBytes) return;
+      }
+
+      // Keyword / Caption Filter
+      const searchText = `${mediaInfo.filename} ${mediaInfo.text_content || ''} ${msg.message || ''}`.toLowerCase();
+
+      if (options.include_keywords && options.include_keywords.trim().length > 0) {
+        const includes = options.include_keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        if (includes.length > 0) {
+          const matched = includes.some(k => searchText.includes(k));
+          if (!matched) return;
+        }
+      }
+
+      if (options.exclude_keywords && options.exclude_keywords.trim().length > 0) {
+        const excludes = options.exclude_keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        if (excludes.length > 0) {
+          const hasExcluded = excludes.some(k => searchText.includes(k));
+          if (hasExcluded) return;
+        }
+      }
+
       // Determine topic ID and title for this specific message
       const replyToObj = msg.replyTo;
       const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId || topic_id;
@@ -109,6 +139,13 @@ export class ScannerService {
       const tempPath = path.join(itemFolder, '.temp', `${sessionId}_${msg.id}.part`);
       const finalFileName = `${formattedSeq}_${this.sanitizeFilename(mediaInfo.filename)}`;
       const finalPath = path.join(itemFolder, finalFileName);
+
+      // Skip Existing Files on Disk
+      if (options.skip_existing_files) {
+        if (fs.existsSync(finalPath) || fs.existsSync(tempPath)) {
+          return;
+        }
+      }
 
       downloadItems.push({
         id: `item_${sessionId}_${msg.id}`,

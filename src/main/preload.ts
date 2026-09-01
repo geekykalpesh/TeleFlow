@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkPassword: (password: string) => ipcRenderer.invoke('auth:check-password', password),
   logout: () => ipcRenderer.invoke('auth:logout'),
   getAllSettings: () => ipcRenderer.invoke('settings:get-all'),
+  setSetting: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value),
   setDefaultFolder: (folderPath: string) => ipcRenderer.invoke('settings:set-default-folder', folderPath),
   setSpeedLimit: (bps: number) => ipcRenderer.invoke('settings:set-speed-limit', bps),
   getSpeedLimit: () => ipcRenderer.invoke('settings:get-speed-limit'),

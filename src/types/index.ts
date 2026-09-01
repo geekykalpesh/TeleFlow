@@ -118,6 +118,11 @@ export interface ScanOptions {
   download_mode?: 'sequential' | 'parallel';
   concurrency?: number;
   selected_message_ids?: number[];
+  min_file_size_mb?: number;
+  max_file_size_mb?: number;
+  include_keywords?: string;
+  exclude_keywords?: string;
+  skip_existing_files?: boolean;
 }
 
 export interface AppSettings {

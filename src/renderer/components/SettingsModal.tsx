@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppSettings } from '../../types';
-import { Folder, Key, Sliders, Save, CheckCircle2 } from 'lucide-react';
+import { Folder, Key, Sliders, Save, CheckCircle2, Filter } from 'lucide-react';
 
 interface SettingsModalProps {
   onRefresh: () => void;
@@ -12,6 +12,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onRefresh }) => {
   const [concurrency, setConcurrency] = useState(1);
   const [speedLimit, setSpeedLimit] = useState(0);
   const [defaultFolder, setDefaultFolder] = useState('');
+  const [defaultMinSizeMb, setDefaultMinSizeMb] = useState('');
+  const [defaultMaxSizeMb, setDefaultMaxSizeMb] = useState('');
+  const [defaultExcludeKeywords, setDefaultExcludeKeywords] = useState('');
+  const [defaultSkipExisting, setDefaultSkipExisting] = useState(true);
   const [saved, setSaved] = useState(false);
 
   React.useEffect(() => {
@@ -32,6 +36,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onRefresh }) => {
               if (settings['default_destination']) setDefaultFolder(settings['default_destination']);
               if (settings['concurrency']) setConcurrency(parseInt(settings['concurrency'], 10) || 1);
               if (settings['max_speed_limit']) setSpeedLimit(parseInt(settings['max_speed_limit'], 10) || 0);
+              if (settings['default_min_size_mb']) setDefaultMinSizeMb(settings['default_min_size_mb']);
+              if (settings['default_max_size_mb']) setDefaultMaxSizeMb(settings['default_max_size_mb']);
+              if (settings['default_exclude_keywords']) setDefaultExcludeKeywords(settings['default_exclude_keywords']);
+              if (settings['default_skip_existing'] !== undefined) setDefaultSkipExisting(settings['default_skip_existing'] !== 'false');
             }
           });
         }
@@ -61,6 +69,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onRefresh }) => {
       }
       if (api.setSpeedLimit) {
         await api.setSpeedLimit(speedLimit);
+      }
+      if (api.setSetting) {
+        await api.setSetting('default_min_size_mb', defaultMinSizeMb);
+        await api.setSetting('default_max_size_mb', defaultMaxSizeMb);
+        await api.setSetting('default_exclude_keywords', defaultExcludeKeywords);
+        await api.setSetting('default_skip_existing', defaultSkipExisting ? 'true' : 'false');
       }
     }
     setSaved(true);
@@ -206,6 +220,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onRefresh }) => {
             <option value={10485760}>10 MB/s</option>
             <option value={20971520}>20 MB/s</option>
           </select>
+        </div>
+
+        {/* Default Content Filtering Rules */}
+        <div className="glass-panel" style={{ padding: '20px' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Filter size={18} color="#00d4ff" /> Default Content Filtering & Rules
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Default Min File Size (MB)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 0 (Unlimited)"
+                  className="input-field"
+                  value={defaultMinSizeMb}
+                  onChange={(e) => setDefaultMinSizeMb(e.target.value)}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Default Max File Size (MB)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 2000"
+                  className="input-field"
+                  value={defaultMaxSizeMb}
+                  onChange={(e) => setDefaultMaxSizeMb(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Default Excluded Keywords (comma-separated)</label>
+              <input
+                type="text"
+                placeholder="e.g. sample, trailer, promo"
+                className="input-field"
+                value={defaultExcludeKeywords}
+                onChange={(e) => setDefaultExcludeKeywords(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>
+              <div>
+                <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', margin: 0 }}>
+                  Skip Duplicate Files Already On Disk
+                </p>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Automatically skip files if matching target destination file exists.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={defaultSkipExisting}
+                onChange={(e) => setDefaultSkipExisting(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#00d4ff' }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Queue Backup & Restore */}

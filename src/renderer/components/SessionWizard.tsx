@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TelegramChat, ScanOptions, MediaType } from '../../types';
-import { Folder, Search, Sliders, CheckSquare, X, ListOrdered } from 'lucide-react';
+import { Folder, Search, Sliders, CheckSquare, X, ListOrdered, Filter } from 'lucide-react';
 
 interface SessionWizardProps {
   onClose: () => void;
@@ -21,12 +21,33 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Advanced Content Filter States
+  const [minSizeMb, setMinSizeMb] = useState<string>('');
+  const [maxSizeMb, setMaxSizeMb] = useState<string>('');
+  const [includeKeywords, setIncludeKeywords] = useState<string>('');
+  const [excludeKeywords, setExcludeKeywords] = useState<string>('');
+  const [skipExisting, setSkipExisting] = useState<boolean>(true);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
+
   const [topics, setTopics] = useState<any[]>([]);
   const [selectedTopicId, setSelectedTopicId] = useState<string>('all');
   const [loadingTopics, setLoadingTopics] = useState(false);
 
   useEffect(() => {
     loadDialogs();
+    try {
+      const api = (window as any).electronAPI;
+      if (api && api.getAllSettings) {
+        api.getAllSettings().then((settings: Record<string, string>) => {
+          if (settings) {
+            if (settings['default_min_size_mb']) setMinSizeMb(settings['default_min_size_mb']);
+            if (settings['default_max_size_mb']) setMaxSizeMb(settings['default_max_size_mb']);
+            if (settings['default_exclude_keywords']) setExcludeKeywords(settings['default_exclude_keywords']);
+            if (settings['default_skip_existing'] !== undefined) setSkipExisting(settings['default_skip_existing'] !== 'false');
+          }
+        });
+      }
+    } catch (e) {}
   }, []);
 
   useEffect(() => {
@@ -112,7 +133,12 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
       media_types: mediaTypes,
       destination_path: destinationPath || undefined,
       download_mode: downloadMode,
-      concurrency: downloadMode === 'sequential' ? 1 : concurrency
+      concurrency: downloadMode === 'sequential' ? 1 : concurrency,
+      min_file_size_mb: minSizeMb ? parseFloat(minSizeMb) : undefined,
+      max_file_size_mb: maxSizeMb ? parseFloat(maxSizeMb) : undefined,
+      include_keywords: includeKeywords || undefined,
+      exclude_keywords: excludeKeywords || undefined,
+      skip_existing_files: skipExisting
     };
 
     try {
@@ -341,6 +367,96 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
                   onChange={(e) => setConcurrency(parseInt(e.target.value, 10))}
                   style={{ width: '100%', accentColor: 'var(--accent-purple)' }}
                 />
+              </div>
+            )}
+          </div>
+
+          {/* Step 5: Advanced Content Filters & Rules */}
+          <div style={{ marginBottom: '24px', padding: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px' }}>
+            <div
+              onClick={() => setShowAdvancedFilters(prev => !prev)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+            >
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#00d4ff', margin: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Filter size={15} color="#00d4ff" /> 5. ADVANCED CONTENT FILTERS & RULES (OPTIONAL)
+              </label>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                {showAdvancedFilters ? '▲ Hide Rules' : '▼ Expand Rules'}
+              </span>
+            </div>
+
+            {showAdvancedFilters && (
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* File Size Limits */}
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                    File Size Thresholds (in Megabytes)
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Min File Size (MB)</span>
+                      <input
+                        type="number"
+                        placeholder="e.g. 5"
+                        className="input-field"
+                        value={minSizeMb}
+                        onChange={(e) => setMinSizeMb(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Max File Size (MB)</span>
+                      <input
+                        type="number"
+                        placeholder="e.g. 2000"
+                        className="input-field"
+                        value={maxSizeMb}
+                        onChange={(e) => setMaxSizeMb(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Include / Exclude Keywords */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Include Keywords (comma-separated)</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. 720p, Lecture, Video"
+                      className="input-field"
+                      value={includeKeywords}
+                      onChange={(e) => setIncludeKeywords(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Exclude Keywords (comma-separated)</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. sample, trailer, promo"
+                      className="input-field"
+                      value={excludeKeywords}
+                      onChange={(e) => setExcludeKeywords(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Skip Existing Toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>
+                  <div>
+                    <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', margin: 0 }}>
+                      Skip Duplicate Files Already On Disk
+                    </p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Prevents re-downloading files if matching target destination file exists.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={skipExisting}
+                    onChange={(e) => setSkipExisting(e.target.checked)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#00d4ff' }}
+                  />
+                </div>
               </div>
             )}
           </div>
