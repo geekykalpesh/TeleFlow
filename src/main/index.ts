@@ -322,7 +322,20 @@ function registerIpcHandlers() {
   ipcMain.handle('queue:prioritize-items', (_, ids: string[]) => { downloadManager.prioritizeItems(ids); return { success: true }; });
   ipcMain.handle('queue:retry-all-failed', () => { downloadManager.retryAllFailed(); return { success: true }; });
   ipcMain.handle('queue:set-concurrency', (_, n) => downloadManager.setConcurrency(n));
-  ipcMain.handle('db:delete-session', (_, id) => dbService.deleteSession(id));
+  ipcMain.handle('db:delete-session', (_, id: string, deleteFiles: boolean) => {
+    downloadManager.pauseSession(id);
+    dbService.deleteSession(id, deleteFiles);
+    return { success: true };
+  });
+  ipcMain.handle('db:update-session-flags', (_, id: string, flags: { download_enabled?: boolean; sync_enabled?: boolean }) => {
+    dbService.updateSessionFlags(id, flags);
+    if (flags.download_enabled === false) {
+      downloadManager.pauseSession(id);
+    } else if (flags.download_enabled === true) {
+      downloadManager.startQueue();
+    }
+    return { success: true };
+  });
   ipcMain.handle('db:clear-completed', (_, sessionId?: string) => { dbService.clearCompletedItems(sessionId); return { success: true }; });
   ipcMain.handle('db:delete-items', async (_, ids: string[], deleteFiles: boolean) => {
     if (!ids || ids.length === 0) return { success: true, deletedCount: 0 };

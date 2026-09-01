@@ -366,7 +366,7 @@ export class ScannerService {
   }
 
   public async syncAllSessions(): Promise<{ totalAdded: number; message: string }> {
-    const sessions = dbService.getSessions();
+    const sessions = dbService.getSessions().filter(s => s.sync_enabled !== false);
     let totalAdded = 0;
 
     for (const session of sessions) {
@@ -382,7 +382,7 @@ export class ScannerService {
       totalAdded,
       message: totalAdded > 0
         ? `Synced ${totalAdded} new files across channels.`
-        : 'All channels are up to date.'
+        : 'All active channels are up to date.'
     };
   }
 

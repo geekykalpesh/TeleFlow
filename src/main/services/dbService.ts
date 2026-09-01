@@ -70,9 +70,19 @@ class DbService {
         download_mode TEXT NOT NULL DEFAULT 'sequential',
         concurrency INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'ACTIVE'
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        download_enabled INTEGER NOT NULL DEFAULT 1,
+        sync_enabled INTEGER NOT NULL DEFAULT 1
       );
     `);
+
+    try {
+      this.db.run(`ALTER TABLE sessions ADD COLUMN download_enabled INTEGER NOT NULL DEFAULT 1`);
+    } catch (e) {}
+
+    try {
+      this.db.run(`ALTER TABLE sessions ADD COLUMN sync_enabled INTEGER NOT NULL DEFAULT 1`);
+    } catch (e) {}
 
     this.db.run(`
       CREATE TABLE IF NOT EXISTS download_items (
@@ -175,15 +185,17 @@ class DbService {
       INSERT INTO sessions (
         id, title, chat_id, chat_title, from_message_id, to_message_id,
         destination_path, add_sequence_prefix, sequence_padding,
-        download_mode, concurrency, created_at, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        download_mode, concurrency, created_at, status, download_enabled, sync_enabled
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run([
       session.id, session.title, session.chat_id, session.chat_title,
       session.from_message_id || null, session.to_message_id || null,
       session.destination_path, session.add_sequence_prefix ? 1 : 0,
       session.sequence_padding, session.download_mode, session.concurrency,
-      session.created_at, session.status
+      session.created_at, session.status,
+      session.download_enabled === false ? 0 : 1,
+      session.sync_enabled === false ? 0 : 1
     ]);
     stmt.free();
     this.save();
@@ -191,7 +203,7 @@ class DbService {
 
   public getSessions(): DownloadSession[] {
     if (!this.db) return [];
-    const res = this.db.exec(`SELECT * FROM sessions ORDER BY created_at DESC`);
+    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions ORDER BY created_at DESC`);
     if (!res.length) return [];
     
     const rows = res[0].values;
@@ -212,6 +224,8 @@ class DbService {
         concurrency: row[10],
         created_at: row[11],
         status: row[12],
+        download_enabled: row[13] === undefined || row[13] === null ? true : Boolean(row[13]),
+        sync_enabled: row[14] === undefined || row[14] === null ? true : Boolean(row[14]),
         total_files: stats.total_files,
         completed_files: stats.completed_files,
         total_bytes: stats.total_bytes,
@@ -221,9 +235,9 @@ class DbService {
   }
 
   public getSessionById(sessionId: string): DownloadSession | null {
-
     if (!this.db) return null;
-    const res = this.db.exec(`SELECT * FROM sessions WHERE id = '${sessionId}'`);
+    const cleanId = sessionId.replace(/'/g, "''");
+    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions WHERE id = '${cleanId}'`);
     if (!res.length || !res[0].values.length) return null;
     const row = res[0].values[0];
     const stats = this.getSessionStats(sessionId);
@@ -241,6 +255,8 @@ class DbService {
       concurrency: row[10] as number,
       created_at: row[11] as string,
       status: row[12] as any,
+      download_enabled: row[13] === undefined || row[13] === null ? true : Boolean(row[13]),
+      sync_enabled: row[14] === undefined || row[14] === null ? true : Boolean(row[14]),
       total_files: stats.total_files,
       completed_files: stats.completed_files,
       total_bytes: stats.total_bytes,
@@ -365,17 +381,16 @@ class DbService {
   }
 
   public getNextQueuedItem(sessionId?: string, excludeIds: string[] = []): DownloadItem | null {
-
     if (!this.db) return null;
-    let query = `SELECT id, session_id, chat_id, chat_title, message_id, sequence_number, formatted_sequence, media_type, original_filename, extension, mime_type, telegram_file_id, total_bytes, downloaded_bytes, speed_bps, status, temp_path, final_path, error_message, created_at, completed_at, text_content FROM download_items WHERE status = 'QUEUED'`;
+    let query = `SELECT i.id, i.session_id, i.chat_id, i.chat_title, i.message_id, i.sequence_number, i.formatted_sequence, i.media_type, i.original_filename, i.extension, i.mime_type, i.telegram_file_id, i.total_bytes, i.downloaded_bytes, i.speed_bps, i.status, i.temp_path, i.final_path, i.error_message, i.created_at, i.completed_at, i.text_content FROM download_items i LEFT JOIN sessions s ON i.session_id = s.id WHERE i.status = 'QUEUED' AND (s.download_enabled IS NULL OR s.download_enabled = 1)`;
     if (sessionId) {
-      query += ` AND session_id = '${sessionId.replace(/'/g, "''")}'`;
+      query += ` AND i.session_id = '${sessionId.replace(/'/g, "''")}'`;
     }
     if (excludeIds && excludeIds.length > 0) {
       const formatted = excludeIds.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
-      query += ` AND id NOT IN (${formatted})`;
+      query += ` AND i.id NOT IN (${formatted})`;
     }
-    query += ` ORDER BY sequence_number ASC LIMIT 1`;
+    query += ` ORDER BY i.sequence_number ASC LIMIT 1`;
 
     const res = this.db.exec(query);
     if (!res.length || !res[0].values.length) return null;
@@ -491,11 +506,41 @@ class DbService {
     this.save();
   }
 
-  public deleteSession(sessionId: string): void {
+  public deleteSession(sessionId: string, deleteFilesOnDisk: boolean = false): void {
     if (!this.db) return;
-    this.db.run(`DELETE FROM download_items WHERE session_id = '${sessionId}'`);
-    this.db.run(`DELETE FROM sessions WHERE id = '${sessionId}'`);
+    const cleanSessionId = sessionId.replace(/'/g, "''");
+
+    if (deleteFilesOnDisk) {
+      const items = this.getDownloadItems(sessionId);
+      for (const item of items) {
+        if (item.temp_path && fs.existsSync(item.temp_path)) {
+          try { fs.rmSync(item.temp_path, { force: true }); } catch (e) {}
+        }
+        if (item.final_path && fs.existsSync(item.final_path)) {
+          try { fs.rmSync(item.final_path, { force: true }); } catch (e) {}
+        }
+      }
+    }
+
+    this.db.run(`DELETE FROM download_items WHERE session_id = '${cleanSessionId}'`);
+    this.db.run(`DELETE FROM sessions WHERE id = '${cleanSessionId}'`);
     this.save();
+  }
+
+  public updateSessionFlags(sessionId: string, flags: { download_enabled?: boolean; sync_enabled?: boolean }): void {
+    if (!this.db) return;
+    const cleanSessionId = sessionId.replace(/'/g, "''");
+    const updates: string[] = [];
+    if (flags.download_enabled !== undefined) {
+      updates.push(`download_enabled = ${flags.download_enabled ? 1 : 0}`);
+    }
+    if (flags.sync_enabled !== undefined) {
+      updates.push(`sync_enabled = ${flags.sync_enabled ? 1 : 0}`);
+    }
+    if (updates.length > 0) {
+      this.db.run(`UPDATE sessions SET ${updates.join(', ')} WHERE id = '${cleanSessionId}'`);
+      this.save();
+    }
   }
 
   public deleteDownloadItems(ids: string[]): void {

@@ -100,6 +100,40 @@ export const QueueView: React.FC<QueueViewProps> = ({
   // Sync state
   const [syncingSessionId, setSyncingSessionId] = useState<string | null>(null);
 
+  // Delete Card Modal State
+  const [deleteCardSession, setDeleteCardSession] = useState<DownloadSession | null>(null);
+
+  const handlePromptDeleteCard = (session: DownloadSession, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setDeleteCardSession(session);
+  };
+
+  const handleConfirmDeleteCard = async (deleteFilesOnDisk: boolean) => {
+    if (!deleteCardSession) return;
+    const sid = deleteCardSession.id;
+    setDeleteCardSession(null);
+    await (window as any).electronAPI?.deleteSession?.(sid, deleteFilesOnDisk);
+    if (internalSessionId === sid) {
+      setInternalSessionId(null);
+      onSelectSession(null);
+    }
+    onRefresh();
+  };
+
+  const handleToggleDownloadSession = async (sessionId: string, currentStatus?: boolean, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const next = currentStatus === false ? true : false;
+    await (window as any).electronAPI?.updateSessionFlags?.(sessionId, { download_enabled: next });
+    onRefresh();
+  };
+
+  const handleToggleSyncSession = async (sessionId: string, currentStatus?: boolean, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const next = currentStatus === false ? true : false;
+    await (window as any).electronAPI?.updateSessionFlags?.(sessionId, { sync_enabled: next });
+    onRefresh();
+  };
+
   const handleSyncChannel = async (sessionId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setSyncingSessionId(sessionId);
@@ -423,6 +457,22 @@ export const QueueView: React.FC<QueueViewProps> = ({
                   }}>
                     {isComplete ? '✓ COMPLETED' : isActive ? `⬇ DOWNLOADING (${sDownloading})` : isPaused ? '⏸ PAUSED' : hasFailed ? `✗ ${sFailed} FAILED` : 'QUEUED'}
                   </span>
+                  {activeSession.download_enabled === false && (
+                    <span style={{
+                      fontSize: '0.68rem', fontWeight: 800, padding: '2px 9px', borderRadius: '20px',
+                      background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)'
+                    }}>
+                      ⏸ DOWNLOAD DISABLED
+                    </span>
+                  )}
+                  {activeSession.sync_enabled === false && (
+                    <span style={{
+                      fontSize: '0.68rem', fontWeight: 800, padding: '2px 9px', borderRadius: '20px',
+                      background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)'
+                    }}>
+                      🚫 AUTO-SYNC OFF
+                    </span>
+                  )}
                 </div>
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>📡 {activeSession.chat_title}</span>
@@ -433,7 +483,7 @@ export const QueueView: React.FC<QueueViewProps> = ({
             </div>
 
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               {canPause && !isComplete && (
                 <button onClick={() => handlePauseSession(activeSession.id)} className="btn"
                   style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', color: '#f59e0b', padding: '8px 18px', fontSize: '0.85rem', fontWeight: 700, borderRadius: '8px' }}>
@@ -452,6 +502,37 @@ export const QueueView: React.FC<QueueViewProps> = ({
                   <RefreshCw size={15} /> Retry Failed ({sFailed})
                 </button>
               )}
+
+              {/* Download Enable/Disable Toggle */}
+              <button
+                onClick={e => handleToggleDownloadSession(activeSession.id, activeSession.download_enabled, e)}
+                className="btn btn-secondary"
+                style={{
+                  padding: '8px 14px', fontSize: '0.82rem', gap: '5px',
+                  color: activeSession.download_enabled === false ? '#f59e0b' : '#fff',
+                  borderColor: activeSession.download_enabled === false ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.15)'
+                }}
+                title={activeSession.download_enabled === false ? "Enable downloading for this channel" : "Disable downloading for this channel"}
+              >
+                {activeSession.download_enabled === false ? <Play size={15} color="#f59e0b" /> : <Pause size={15} color="#94a3b8" />}
+                {activeSession.download_enabled === false ? 'Enable Downloading' : 'Disable Downloading'}
+              </button>
+
+              {/* Auto-Sync Enable/Disable Toggle */}
+              <button
+                onClick={e => handleToggleSyncSession(activeSession.id, activeSession.sync_enabled, e)}
+                className="btn btn-secondary"
+                style={{
+                  padding: '8px 14px', fontSize: '0.82rem', gap: '5px',
+                  color: activeSession.sync_enabled === false ? '#ef4444' : '#00d4ff',
+                  borderColor: activeSession.sync_enabled === false ? 'rgba(239,68,68,0.4)' : 'rgba(0,212,255,0.3)'
+                }}
+                title={activeSession.sync_enabled === false ? "Enable auto-sync for this channel" : "Disable auto-sync for this channel"}
+              >
+                <RefreshCw size={15} color={activeSession.sync_enabled === false ? '#ef4444' : '#00d4ff'} />
+                {activeSession.sync_enabled === false ? 'Auto-Sync: OFF' : 'Auto-Sync: ON'}
+              </button>
+
               <button onClick={e => handleSyncChannel(activeSession.id, e)} disabled={syncingSessionId === activeSession.id} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.82rem', gap: '5px' }}>
                 <RefreshCw size={15} className={syncingSessionId === activeSession.id ? 'spin' : ''} /> {syncingSessionId === activeSession.id ? 'Syncing...' : 'Sync Channel'}
               </button>
@@ -463,6 +544,14 @@ export const QueueView: React.FC<QueueViewProps> = ({
                   <CheckCircle2 size={15} color="#10b981" /> Clear Completed ({sDone})
                 </button>
               )}
+              <button
+                onClick={e => handlePromptDeleteCard(activeSession, e)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 14px', fontSize: '0.82rem', gap: '5px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }}
+                title="Delete this channel card"
+              >
+                <Trash2 size={15} color="#ef4444" /> Delete Card
+              </button>
             </div>
           </div>
 
@@ -1176,14 +1265,26 @@ export const QueueView: React.FC<QueueViewProps> = ({
                             >
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                                 <div>
-                                  <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0, color: '#fff' }}>
-                                    📂 {session.topic_title || session.title}
-                                  </h4>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                                    <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0, color: '#fff' }}>
+                                      📂 {session.topic_title || session.title}
+                                    </h4>
+                                    {session.download_enabled === false && (
+                                      <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '12px', background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}>
+                                        ⏸ DOWNLOAD OFF
+                                      </span>
+                                    )}
+                                    {session.sync_enabled === false && (
+                                      <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '12px', background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)' }}>
+                                        🚫 SYNC OFF
+                                      </span>
+                                    )}
+                                  </div>
                                   <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>
                                     Folder: <span style={{ fontFamily: 'var(--font-mono)', color: '#00d4ff' }}>{session.destination_path}</span>
                                   </p>
                                 </div>
-                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                   {canPause && !isComplete && (
                                     <button onClick={e => handlePauseSession(session.id, e)} style={{ padding: '4px 8px', fontSize: '0.72rem' }} className="btn btn-secondary">
                                       <Pause size={12} /> Pause
@@ -1194,8 +1295,40 @@ export const QueueView: React.FC<QueueViewProps> = ({
                                       <Play size={12} /> Resume
                                     </button>
                                   )}
+                                  <button
+                                    onClick={e => handleToggleDownloadSession(session.id, session.download_enabled, e)}
+                                    style={{
+                                      padding: '4px 8px', fontSize: '0.72rem', gap: '4px',
+                                      color: session.download_enabled === false ? '#f59e0b' : '#fff',
+                                      borderColor: session.download_enabled === false ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.15)'
+                                    }}
+                                    className="btn btn-secondary"
+                                    title={session.download_enabled === false ? "Enable download" : "Disable download"}
+                                  >
+                                    {session.download_enabled === false ? 'Enable Download' : 'Disable Download'}
+                                  </button>
+                                  <button
+                                    onClick={e => handleToggleSyncSession(session.id, session.sync_enabled, e)}
+                                    style={{
+                                      padding: '4px 8px', fontSize: '0.72rem', gap: '4px',
+                                      color: session.sync_enabled === false ? '#ef4444' : '#00d4ff',
+                                      borderColor: session.sync_enabled === false ? 'rgba(239,68,68,0.4)' : 'rgba(0,212,255,0.3)'
+                                    }}
+                                    className="btn btn-secondary"
+                                    title={session.sync_enabled === false ? "Enable sync" : "Disable sync"}
+                                  >
+                                    {session.sync_enabled === false ? 'Sync: OFF' : 'Sync: ON'}
+                                  </button>
                                   <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.72rem' }}>
                                     Open Topic Page <ChevronRight size={13} />
+                                  </button>
+                                  <button
+                                    onClick={e => handlePromptDeleteCard(session, e)}
+                                    className="btn btn-secondary"
+                                    style={{ padding: '4px 8px', fontSize: '0.72rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
+                                    title="Delete this topic card"
+                                  >
+                                    <Trash2 size={12} color="#ef4444" /> Delete
                                   </button>
                                 </div>
                               </div>
@@ -1272,6 +1405,22 @@ export const QueueView: React.FC<QueueViewProps> = ({
                             }}>
                               {isComplete ? '✓ COMPLETED' : isActive ? `⬇ DOWNLOADING (${sDownloading})` : isPaused ? '⏸ PAUSED' : hasFailed ? `✗ ${sFailed} FAILED` : 'QUEUED'}
                             </span>
+                            {session.download_enabled === false && (
+                              <span style={{
+                                fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px',
+                                background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)'
+                              }}>
+                                ⏸ DOWNLOAD OFF
+                              </span>
+                            )}
+                            {session.sync_enabled === false && (
+                              <span style={{
+                                fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px',
+                                background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)'
+                              }}>
+                                🚫 AUTO-SYNC OFF
+                              </span>
+                            )}
                           </div>
                           <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             📡 {session.chat_title} · <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: '#00d4ff' }}>{session.destination_path}</span>
@@ -1279,7 +1428,7 @@ export const QueueView: React.FC<QueueViewProps> = ({
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
                         {canPause && !isComplete && (
                           <button onClick={e => handlePauseSession(session.id, e)} style={{ padding: '6px 12px', fontSize: '0.78rem' }} className="btn btn-secondary">
                             <Pause size={13} /> Pause
@@ -1290,11 +1439,50 @@ export const QueueView: React.FC<QueueViewProps> = ({
                             <Play size={13} /> Resume
                           </button>
                         )}
+
+                        <button
+                          onClick={e => handleToggleDownloadSession(session.id, session.download_enabled, e)}
+                          style={{
+                            padding: '6px 10px', fontSize: '0.78rem', gap: '4px',
+                            color: session.download_enabled === false ? '#f59e0b' : '#fff',
+                            borderColor: session.download_enabled === false ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.15)'
+                          }}
+                          className="btn btn-secondary"
+                          title={session.download_enabled === false ? "Enable downloading for this card" : "Disable downloading for this card"}
+                        >
+                          {session.download_enabled === false ? <Play size={13} color="#f59e0b" /> : <Pause size={13} color="#94a3b8" />}
+                          {session.download_enabled === false ? 'Enable Download' : 'Disable Download'}
+                        </button>
+
+                        <button
+                          onClick={e => handleToggleSyncSession(session.id, session.sync_enabled, e)}
+                          style={{
+                            padding: '6px 10px', fontSize: '0.78rem', gap: '4px',
+                            color: session.sync_enabled === false ? '#ef4444' : '#00d4ff',
+                            borderColor: session.sync_enabled === false ? 'rgba(239,68,68,0.4)' : 'rgba(0,212,255,0.3)'
+                          }}
+                          className="btn btn-secondary"
+                          title={session.sync_enabled === false ? "Enable auto-sync for this channel card" : "Disable auto-sync for this channel card"}
+                        >
+                          <RefreshCw size={13} color={session.sync_enabled === false ? '#ef4444' : '#00d4ff'} />
+                          {session.sync_enabled === false ? 'Sync: OFF' : 'Sync: ON'}
+                        </button>
+
                         <button onClick={e => handleSyncChannel(session.id, e)} disabled={syncingSessionId === session.id} style={{ padding: '6px 12px', fontSize: '0.78rem' }} className="btn btn-secondary">
                           <RefreshCw size={13} className={syncingSessionId === session.id ? 'spin' : ''} /> {syncingSessionId === session.id ? 'Syncing...' : 'Sync'}
                         </button>
+
                         <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700 }}>
                           Open Channel Page <ChevronRight size={14} />
+                        </button>
+
+                        <button
+                          onClick={e => handlePromptDeleteCard(session, e)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 10px', fontSize: '0.78rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }}
+                          title="Delete this channel card"
+                        >
+                          <Trash2 size={13} color="#ef4444" /> Delete Card
                         </button>
                       </div>
                     </div>
@@ -1569,6 +1757,85 @@ export const QueueView: React.FC<QueueViewProps> = ({
                 <span style={{ color: '#94a3b8' }}>Toggle Shortcuts Cheat Sheet</span>
                 <kbd style={{ background: '#1e293b', border: '1px solid #475569', padding: '2px 8px', borderRadius: '4px', color: '#fff', fontFamily: 'monospace' }}>Shift + ?</kbd>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Channel Card Modal ── */}
+      {deleteCardSession && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999,
+          background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '480px', borderRadius: '16px', padding: '24px',
+            border: '1px solid rgba(239, 68, 68, 0.4)', background: '#0f172a',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', gap: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '42px', height: '42px', borderRadius: '12px', flexShrink: 0,
+                background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Trash2 size={22} color="#ef4444" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#fff' }}>
+                  Delete Channel Card
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                  "{deleteCardSession.title}"
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.4', margin: 0 }}>
+              How would you like to delete this card and its download records?
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                onClick={() => handleConfirmDeleteCard(false)}
+                className="btn"
+                style={{
+                  padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '0.84rem',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer'
+                }}
+              >
+                <strong style={{ fontSize: '0.88rem', color: '#00d4ff' }}>📁 Remove Card Only (Keep files on disk)</strong>
+                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                  Removes the card & queue list from TeleFlow. All files already downloaded to your disk remain 100% safe.
+                </span>
+              </button>
+
+              <button
+                onClick={() => handleConfirmDeleteCard(true)}
+                className="btn"
+                style={{
+                  padding: '12px 16px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fff', fontSize: '0.84rem',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer'
+                }}
+              >
+                <strong style={{ fontSize: '0.88rem', color: '#f87171' }}>⚠️ Delete Card & Delete Files from Disk</strong>
+                <span style={{ fontSize: '0.74rem', color: 'rgba(248, 113, 113, 0.85)', marginTop: '3px' }}>
+                  Permanently deletes all downloaded files for this channel card from your computer disk.
+                </span>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+              <button
+                onClick={() => setDeleteCardSession(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '0.8rem' }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

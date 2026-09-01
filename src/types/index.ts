@@ -47,6 +47,8 @@ export interface DownloadSession {
   concurrency: number;
   created_at: string;
   status: 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+  download_enabled?: boolean;
+  sync_enabled?: boolean;
   total_files: number;
   completed_files: number;
   total_bytes: number;

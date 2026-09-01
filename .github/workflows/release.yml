@@ -61,12 +61,13 @@ jobs:
 
             ### ✨ Release Notes & Fixes in ${{ github.ref_name }}
 
-            - **🐛 Fixed Application Freeze on Pause & Resume**: Completely resolved the main process thread freeze when pausing and resuming downloads.
+            - **🗑️ Delete Specific Channel Cards**: Added explicit card deletion options for all channel cards & forum topic sub-cards (with choice to remove from list or delete files on disk).
+            - **⏸️ Per-Card Download Controls**: Turn downloads ON or OFF per card ("don't want to download them").
+            - **🔄 Per-Card Auto-Sync Controls**: Turn auto-sync ON or OFF per card ("don't want to sync them again" / "want to sync them").
             - **⚡ Turbo Multi-Worker Download Engine**: Opens **16 parallel MTProto TCP sockets per file** with 512 KB chunk payloads, yielding download speeds up to **15 MB/s - 45+ MB/s**.
             - **🔗 Telegram Link Range Parsing**: Paste any Telegram message link into Range selection fields to download exact message spans.
             - **🔁 Unlimited Full-Channel Auto-Sync**: Automatically pages through complete channel history without truncation or page cutoffs.
             - **🔑 Seamless 3-Step Login Flow**: Smooth step transitions (Credentials -> Telegram App OTP -> 2FA Password).
-            - **⏸️ Granular Pause / Resume / Retry**: Instant transfer abortion with byte-offset resumption from existing `.part` files.
 
             ---
 
