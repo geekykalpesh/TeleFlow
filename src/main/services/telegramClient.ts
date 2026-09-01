@@ -9,10 +9,10 @@ import fs from 'fs';
 
 class TelegramClientService {
   private client: TelegramClient | null = null;
-  private apiId: number = 28923;
-  private apiHash: string = 'c671dcb553990caaa73';
-  private appTitle: string = 'krishnaldrbot';
-  private shortName: string = 'krishnaebot';
+  private apiId: number = 0;
+  private apiHash: string = '';
+  private appTitle: string = 'TeleFlow Desktop';
+  private shortName: string = 'teleflow';
   private serverEnvironment: 'production' | 'test' = 'production';
   private sessionString: string = '';
   private phoneNumber: string = '';
@@ -59,8 +59,10 @@ class TelegramClientService {
   }
 
   public async init(): Promise<void> {
-    const savedApiId = dbService.getSetting('api_id', '');
-    const savedApiHash = dbService.getSetting('api_hash', '');
+    const envApiId = process.env.TELEGRAM_API_ID || process.env.VITE_TELEGRAM_API_ID || '';
+    const envApiHash = process.env.TELEGRAM_API_HASH || process.env.VITE_TELEGRAM_API_HASH || '';
+    const savedApiId = dbService.getSetting('api_id', envApiId);
+    const savedApiHash = dbService.getSetting('api_hash', envApiHash);
     const savedAppTitle = dbService.getSetting('app_title', 'TeleFlow Desktop');
     const savedShortName = dbService.getSetting('short_name', 'teleflow');
     const savedEnv = dbService.getSetting('server_environment', 'production') as 'production' | 'test';
