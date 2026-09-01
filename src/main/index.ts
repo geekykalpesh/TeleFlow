@@ -325,7 +325,11 @@ function registerIpcHandlers() {
   ipcMain.handle('queue:resume-items', (_, ids: string[]) => { downloadManager.resumeItems(ids); return { success: true }; });
   ipcMain.handle('queue:prioritize-items', (_, ids: string[]) => { downloadManager.prioritizeItems(ids); return { success: true }; });
   ipcMain.handle('queue:retry-all-failed', () => { downloadManager.retryAllFailed(); return { success: true }; });
-  ipcMain.handle('queue:set-concurrency', (_, n) => downloadManager.setConcurrency(n));
+  ipcMain.handle('queue:set-concurrency', (_, n) => {
+    dbService.setSetting('concurrency', String(n));
+    downloadManager.setConcurrency(n);
+    return { success: true };
+  });
   ipcMain.handle('db:delete-session', (_, id: string, deleteFiles: boolean) => {
     downloadManager.pauseSession(id);
     dbService.deleteSession(id, deleteFiles);

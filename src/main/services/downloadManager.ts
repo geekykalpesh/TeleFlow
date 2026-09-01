@@ -24,6 +24,20 @@ export class DownloadManager {
 
   public setConcurrency(concurrency: number): void {
     this.currentConcurrency = Math.max(1, Math.min(16, concurrency));
+    try {
+      dbService.setSetting('concurrency', String(this.currentConcurrency));
+    } catch (e) {}
+  }
+
+  public getConcurrency(): number {
+    const saved = dbService.getSetting('concurrency', '');
+    if (saved) {
+      const val = parseInt(saved, 10);
+      if (!isNaN(val) && val >= 1) {
+        this.currentConcurrency = Math.max(1, Math.min(16, val));
+      }
+    }
+    return this.currentConcurrency;
   }
 
   public setSpeedLimit(bytesPerSec: number): void {
@@ -182,7 +196,9 @@ export class DownloadManager {
     this.isProcessing = true;
     const attemptedInThisPass = new Set<string>();
 
-    while (this.activeDownloads.size < this.currentConcurrency && !this.isPaused) {
+    const limitConcurrency = this.getConcurrency();
+
+    while (this.activeDownloads.size < limitConcurrency && !this.isPaused) {
       const excludeIds = Array.from(new Set([...this.activeDownloads.keys(), ...attemptedInThisPass]));
       const nextItem = dbService.getNextQueuedItem(undefined, excludeIds);
       if (!nextItem) break;
@@ -192,7 +208,7 @@ export class DownloadManager {
     }
 
     const remainingQueued = dbService.getNextQueuedItem();
-    if (remainingQueued && this.activeDownloads.size < this.currentConcurrency && !this.isPaused) {
+    if (remainingQueued && this.activeDownloads.size < limitConcurrency && !this.isPaused) {
       setTimeout(() => this.processQueue(), 500);
     }
 
