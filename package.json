@@ -1,6 +1,6 @@
 {
   "name": "teleflow",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Desktop Telegram Client & Sequential File Downloader with Deterministic Ordering",
   "main": "dist-electron/index.js",
   "scripts": {
@@ -53,13 +53,6 @@
     "productName": "TeleFlow",
     "icon": "build/icon.png",
     "npmRebuild": false,
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "geekykalpesh",
-        "repo": "TeleFlow"
-      }
-    ],
     "directories": {
       "output": "release/${version}"
     },
@@ -76,8 +69,7 @@
     "win": {
       "icon": "build/icon.ico",
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
@@ -91,15 +83,13 @@
     },
     "mac": {
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ],
       "category": "public.app-category.utilities"
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
       ],
       "category": "Utility",
       "maintainer": "TeleFlow Team <geekykalpesh@gmail.com>"

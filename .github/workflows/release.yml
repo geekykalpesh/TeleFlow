@@ -41,8 +41,8 @@ jobs:
       - name: Compile & Build Frontend
         run: npm run build
 
-      - name: Build & Publish Electron Executables
-        run: npx electron-builder --config.npmRebuild=false --publish always
+      - name: Build & Package Electron Executables
+        run: npx electron-builder --config.npmRebuild=false --publish never
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
@@ -61,6 +61,7 @@ jobs:
 
             ### ✨ Release Notes & Fixes in ${{ github.ref_name }}
 
+            - **🧹 Clean Release Installer Assets**: Streamlined release binaries to clean single setup installers (`.exe`, `.dmg`, `.AppImage`) and removed all intermediate blockmaps, metadata ymls, and duplicate packages.
             - **🔒 Secure Local Credential Vault**: Zero credentials hardcoded in codebase. Personal sessions are stored strictly on your local PC (`AppData`) and seamlessly preserved across all application updates without re-logging in.
             - **🚀 Max-Speed Continuous Download Engine**: Persistent 20-connection MTProto DC pool, 4 MB high-throughput disk write buffer, and up to 10 parallel file workers (continuous max ISP bandwidth up to 100+ MB/s).
             - **⚙️ Advanced Content Filtering & Rules Engine**: Filter downloads by Min/Max file size (MB), Include/Exclude keywords matching filenames and captions, and skip duplicate files on disk.
@@ -73,15 +74,12 @@ jobs:
 
             ### 📦 Download Assets (${{ github.ref_name }})
 
-            - 🪟 **Windows**: `TeleFlow Setup.exe` (NSIS Installer) & Portable Executable
-            - 🍎 **macOS**: `.dmg` & `-mac.zip`
-            - 🐧 **Linux**: `.AppImage` & `.deb`
+            - 🪟 **Windows**: `TeleFlow Setup.exe` (NSIS Desktop Installer)
+            - 🍎 **macOS**: `TeleFlow.dmg` (Mac Disk Image)
+            - 🐧 **Linux**: `TeleFlow.AppImage` (Linux Portable Executable)
           files: |
-            release/*/*.exe
+            release/*/*Setup*.exe
             release/*/*.dmg
-            release/*/*.zip
             release/*/*.AppImage
-            release/*/*.deb
-            release/*/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
