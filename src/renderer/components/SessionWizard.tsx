@@ -362,7 +362,7 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
                 <input
                   type="range"
                   min="2"
-                  max="5"
+                  max="10"
                   value={concurrency}
                   onChange={(e) => setConcurrency(parseInt(e.target.value, 10))}
                   style={{ width: '100%', accentColor: 'var(--accent-purple)' }}

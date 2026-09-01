@@ -172,7 +172,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onRefresh }) => {
             <input
               type="range"
               min="1"
-              max="5"
+              max="10"
               value={concurrency}
               onChange={(e) => setConcurrency(parseInt(e.target.value, 10))}
               style={{ width: '100%', accentColor: 'var(--accent-cyan)' }}

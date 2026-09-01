@@ -77,11 +77,14 @@ class TelegramClientService {
       try {
         const session = new StringSession(this.sessionString);
         this.client = new TelegramClient(session, this.apiId, this.apiHash, {
-          connectionRetries: 5,
+          connectionRetries: 10,
           deviceModel: 'TeleFlow Desktop Client',
           systemVersion: 'Windows 10/11',
-          appVersion: '1.0.0',
-          testServers: this.serverEnvironment === 'test'
+          appVersion: '1.6.0',
+          testServers: this.serverEnvironment === 'test',
+          useWSS: false,
+          maxConcurrentDownloads: 20,
+          autoReconnect: true
         });
         await this.client.connect();
         const me = await this.client.getMe() as any;
@@ -657,7 +660,8 @@ class TelegramClientService {
         try {
           checkAborted();
           writeStream = fs.createWriteStream(targetTempPath, {
-            flags: accumulatedBytes > 0 ? 'a' : 'w'
+            flags: accumulatedBytes > 0 ? 'a' : 'w',
+            highWaterMark: 4 * 1024 * 1024
           });
 
           iter = this.client.iterDownload({
