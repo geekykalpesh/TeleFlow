@@ -53,12 +53,17 @@ function saveWindowState(win: BrowserWindow): void {
   } catch (e) {}
 }
 
-function getAppIconPath(): string {
+function getAppIcon(): Electron.NativeImage {
+  const isWin = process.platform === 'win32';
   const candidates = [
-    path.join(__dirname, '../dist/logo.png'),
+    path.join(__dirname, isWin ? '../public/icon.ico' : '../public/logo.png'),
+    path.join(__dirname, isWin ? '../build/icon.ico' : '../build/icon.png'),
+    path.join(app.getAppPath(), isWin ? 'public/icon.ico' : 'public/logo.png'),
+    path.join(app.getAppPath(), isWin ? 'build/icon.ico' : 'build/icon.png'),
+    path.join(process.cwd(), 'public', isWin ? 'icon.ico' : 'logo.png'),
+    path.join(process.cwd(), 'build', isWin ? 'icon.ico' : 'icon.png'),
     path.join(__dirname, '../public/logo.png'),
     path.join(__dirname, '../build/icon.png'),
-    path.join(app.getAppPath(), 'dist/logo.png'),
     path.join(app.getAppPath(), 'public/logo.png'),
     path.join(app.getAppPath(), 'build/icon.png'),
     path.join(process.cwd(), 'public', 'logo.png'),
@@ -67,31 +72,22 @@ function getAppIconPath(): string {
 
   for (const p of candidates) {
     if (fs.existsSync(p)) {
-      return p;
+      const img = nativeImage.createFromPath(p);
+      if (!img.isEmpty()) {
+        return img;
+      }
     }
   }
-  return '';
+  return nativeImage.createEmpty();
 }
 
 function createTray() {
   if (tray) return;
 
-  const iconPath = getAppIconPath();
-  console.log('[Tray] Loading tray icon from:', iconPath);
-
-  let trayIcon: ReturnType<typeof nativeImage.createFromPath>;
-  if (iconPath && fs.existsSync(iconPath)) {
-    trayIcon = nativeImage.createFromPath(iconPath);
-    if (!trayIcon.isEmpty()) {
-      trayIcon = trayIcon.resize({ width: 16, height: 16, quality: 'best' });
-    } else {
-      console.warn('[Tray] Loaded icon image was empty:', iconPath);
-      trayIcon = nativeImage.createEmpty();
-    }
-  } else {
-    console.warn('[Tray] Could not locate icon path for system tray');
-    trayIcon = nativeImage.createEmpty();
-  }
+  const appIcon = getAppIcon();
+  const trayIcon = !appIcon.isEmpty()
+    ? appIcon.resize({ width: 16, height: 16, quality: 'best' })
+    : nativeImage.createEmpty();
 
   tray = new Tray(trayIcon);
   tray.setToolTip('TeleFlow — Running in background');
@@ -160,7 +156,7 @@ function createTray() {
 
 async function createWindow() {
   const windowState = loadWindowState();
-  const appIconPath = getAppIconPath();
+  const appIcon = getAppIcon();
 
   mainWindow = new BrowserWindow({
     width: windowState.width,
@@ -170,7 +166,7 @@ async function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'TeleFlow',
-    icon: appIconPath || undefined,
+    icon: !appIcon.isEmpty() ? appIcon : undefined,
     frame: true,
     titleBarStyle: 'default',
     backgroundColor: '#0c0f17',
