@@ -659,10 +659,12 @@ class TelegramClientService {
         }
 
         // Align startOffset down to 4096-byte (4KB) boundary for GramJS/Telegram API compliance
-        let accumulatedBytes = Math.floor(startOffset / 4096) * 4096;
-        if (accumulatedBytes < startOffset && fs.existsSync(targetTempPath)) {
+        const initialStartOffset = Math.floor(startOffset / 4096) * 4096;
+        let currentDownloadedBytes = initialStartOffset;
+
+        if (initialStartOffset < startOffset && fs.existsSync(targetTempPath)) {
           try {
-            fs.truncateSync(targetTempPath, accumulatedBytes);
+            fs.truncateSync(targetTempPath, initialStartOffset);
           } catch (e) {}
         }
 
@@ -673,7 +675,7 @@ class TelegramClientService {
         }
 
         const writeStream = fs.createWriteStream(targetTempPath, {
-          flags: accumulatedBytes > 0 ? 'a' : 'w',
+          flags: initialStartOffset > 0 ? 'a' : 'w',
           highWaterMark: 8 * 1024 * 1024
         });
 
@@ -692,7 +694,7 @@ class TelegramClientService {
         }
 
         let nextChunkIndex = 0;
-        const totalChunks = fileSize > 0 ? Math.ceil((fileSize - accumulatedBytes) / CHUNK_SIZE) : Infinity;
+        const totalChunks = fileSize > 0 ? Math.ceil((fileSize - initialStartOffset) / CHUNK_SIZE) : Infinity;
         const completedBuffers = new Map<number, Buffer>();
         let nextToWriteIndex = 0;
         let isCancelled = false;
@@ -704,7 +706,7 @@ class TelegramClientService {
             checkAborted();
 
             const chunkIdx = nextChunkIndex++;
-            const chunkOffset = accumulatedBytes + chunkIdx * CHUNK_SIZE;
+            const chunkOffset = initialStartOffset + chunkIdx * CHUNK_SIZE;
 
             if (fileSize > 0 && chunkOffset >= fileSize) {
               break;
@@ -775,8 +777,8 @@ class TelegramClientService {
                   if (!ok) writeStream.once('drain', resolve);
                 });
 
-                accumulatedBytes += buf.length;
-                onProgress(accumulatedBytes, fileSize || accumulatedBytes);
+                currentDownloadedBytes += buf.length;
+                onProgress(currentDownloadedBytes, fileSize || currentDownloadedBytes);
               }
 
               if (downloadedBuf.length < reqSize) {
