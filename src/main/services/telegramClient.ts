@@ -635,165 +635,81 @@ class TelegramClientService {
         const media = currentMessage.media;
         let dcId: number | undefined = undefined;
         let fileSize: number = 0;
-        let location: any = null;
 
         if (media?.document) {
           dcId = media.document.dcId;
           fileSize = Number(media.document.size || 0);
-          location = new Api.InputDocumentFileLocation({
-            id: media.document.id,
-            accessHash: media.document.accessHash,
-            fileReference: media.document.fileReference,
-            thumbSize: ''
-          });
         } else if (media?.photo) {
           dcId = media.photo.dcId;
           const largestSize = media.photo.sizes ? media.photo.sizes[media.photo.sizes.length - 1] : null;
           fileSize = Number(largestSize?.size || 0);
-          location = new Api.InputPhotoFileLocation({
-            id: media.photo.id,
-            accessHash: media.photo.accessHash,
-            fileReference: media.photo.fileReference,
-            thumbSize: largestSize?.type || ''
-          });
         }
 
         // Align startOffset down to 4096-byte (4KB) boundary for GramJS/Telegram API compliance
-        const initialStartOffset = Math.floor(startOffset / 4096) * 4096;
-        let currentDownloadedBytes = initialStartOffset;
-
-        if (initialStartOffset < startOffset && fs.existsSync(targetTempPath)) {
+        let accumulatedBytes = Math.floor(startOffset / 4096) * 4096;
+        if (accumulatedBytes < startOffset && fs.existsSync(targetTempPath)) {
           try {
-            fs.truncateSync(targetTempPath, initialStartOffset);
+            fs.truncateSync(targetTempPath, accumulatedBytes);
           } catch (e) {}
         }
 
-        const CHUNK_SIZE = 512 * 1024; // 512 KB
         const tempDir = path.dirname(targetTempPath);
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true });
         }
 
         const writeStream = fs.createWriteStream(targetTempPath, {
-          flags: initialStartOffset > 0 ? 'a' : 'w',
+          flags: accumulatedBytes > 0 ? 'a' : 'w',
           highWaterMark: 8 * 1024 * 1024
         });
 
-        // Dedicate parallel senders for media DC
-        const senders: any[] = [];
-        const poolSize = Math.min(8, concurrencyWorkers);
-        if (dcId) {
-          for (let i = 0; i < poolSize; i++) {
-            try {
-              const s = await this.client.getSender(dcId);
-              senders.push(s);
-            } catch (e) {
-              break;
-            }
-          }
-        }
+        let iter: any = null;
+        try {
+          checkAborted();
+          iter = this.client.iterDownload({
+            file: currentMessage.media || currentMessage,
+            offset: bigInt(accumulatedBytes),
+            requestSize: 512 * 1024,
+            dcId: dcId,
+            fileSize: fileSize ? (bigInt(fileSize) as any) : undefined
+          });
 
-        let nextChunkIndex = 0;
-        const totalChunks = fileSize > 0 ? Math.ceil((fileSize - initialStartOffset) / CHUNK_SIZE) : Infinity;
-        const completedBuffers = new Map<number, Buffer>();
-        let nextToWriteIndex = 0;
-        let isCancelled = false;
-
-        const fetchWorker = async (workerId: number) => {
-          const sender = senders[workerId % senders.length] || null;
-
-          while (!isCancelled) {
+          for await (const chunk of iter as any) {
             checkAborted();
 
-            const chunkIdx = nextChunkIndex++;
-            const chunkOffset = initialStartOffset + chunkIdx * CHUNK_SIZE;
-
-            if (fileSize > 0 && chunkOffset >= fileSize) {
-              break;
+            if (itemId && (this.abortedItemIds.has(itemId) || this.abortControllers.get(itemId)?.signal.aborted)) {
+              if (iter && typeof iter.return === 'function') {
+                try { await iter.return(); } catch (e) {}
+              }
+              throw new Error('Download cancelled by user');
             }
 
-            const reqSize = fileSize > 0
-              ? Math.min(CHUNK_SIZE, fileSize - chunkOffset)
-              : CHUNK_SIZE;
-
-            if (reqSize <= 0) break;
-
-            let reqRetries = 0;
-            let downloadedBuf: Buffer | null = null;
-
-            while (reqRetries < 3 && !downloadedBuf && !isCancelled) {
-              try {
-                checkAborted();
-                const req = new Api.upload.GetFile({
-                  location,
-                  offset: bigInt(chunkOffset),
-                  limit: reqSize
-                });
-
-                const res: any = sender
-                  ? await sender.send(req)
-                  : await this.client!.invoke(req, dcId);
-
-                if (res && res.bytes) {
-                  downloadedBuf = res.bytes;
-                } else {
-                  throw new Error('Empty payload');
-                }
-              } catch (err: any) {
-                reqRetries++;
-                const msg = String(err?.message || '').toLowerCase();
-                if (msg.includes('cancel') || msg.includes('abort')) {
-                  isCancelled = true;
-                  throw err;
-                }
-                if (reqRetries >= 3) {
-                  throw err;
-                }
-                await new Promise((r) => setTimeout(r, 1000));
+            // Speed limit throttling check
+            const maxSpeedBps = downloadManager.getSpeedLimit();
+            if (maxSpeedBps > 0 && chunk.length > 0) {
+              const delayMs = (chunk.length / maxSpeedBps) * 1000;
+              if (delayMs > 5) {
+                await new Promise((res) => setTimeout(res, Math.min(delayMs, 1000)));
               }
             }
 
-            if (downloadedBuf) {
-              completedBuffers.set(chunkIdx, downloadedBuf);
-
-              // Flush ordered contiguous chunks to disk
-              while (completedBuffers.has(nextToWriteIndex)) {
-                const buf = completedBuffers.get(nextToWriteIndex)!;
-                completedBuffers.delete(nextToWriteIndex);
-                nextToWriteIndex++;
-
-                // Throttling check
-                const maxSpeed = downloadManager.getSpeedLimit();
-                if (maxSpeed > 0 && buf.length > 0) {
-                  const delay = (buf.length / maxSpeed) * 1000;
-                  if (delay > 5) await new Promise((r) => setTimeout(r, Math.min(delay, 1000)));
-                }
-
-                await new Promise<void>((resolve, reject) => {
-                  const ok = writeStream.write(buf, (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                  });
-                  if (!ok) writeStream.once('drain', resolve);
-                });
-
-                currentDownloadedBytes += buf.length;
-                onProgress(currentDownloadedBytes, fileSize || currentDownloadedBytes);
+            await new Promise<void>((resolve, reject) => {
+              const ok = writeStream.write(chunk, (err) => {
+                if (err) reject(err);
+                else resolve();
+              });
+              if (!ok) {
+                writeStream.once('drain', resolve);
               }
+            });
 
-              if (downloadedBuf.length < reqSize) {
-                // EOF reached
-                break;
-              }
-            }
+            accumulatedBytes += chunk.length;
+            onProgress(accumulatedBytes, fileSize || accumulatedBytes);
           }
-        };
-
-        try {
-          const numWorkers = Math.max(1, senders.length > 0 ? senders.length : poolSize);
-          const workersList = Array.from({ length: numWorkers }, (_, i) => fetchWorker(i));
-          await Promise.all(workersList);
         } finally {
+          if (iter && typeof iter.return === 'function') {
+            try { await iter.return(); } catch (e) {}
+          }
           await new Promise<void>((resolve) => {
             writeStream.end(() => resolve());
           });
@@ -805,7 +721,6 @@ class TelegramClientService {
       } catch (err: any) {
         const errMsg = String(err?.errorMessage || err?.message || err);
 
-        // Don't retry if aborted by user
         if (errMsg.toLowerCase().includes('cancel') || errMsg.toLowerCase().includes('abort')) {
           throw err;
         }

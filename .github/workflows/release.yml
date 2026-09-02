@@ -61,7 +61,7 @@ jobs:
 
             ### ✨ Release Notes & Fixes in ${{ github.ref_name }}
 
-            - **🚀 Ultra Pro Max Speed Engine (Continuous Max Bandwidth)**: Fixed a thread race condition in worker chunk offset calculation. Parallel workers now stream continuous 512 KB chunks without offset collisions or retries, maintaining continuous 30 MB/s – 100+ MB/s speeds without ever dropping to 0 KB/s!
+            - **⚡ Authenticated MTProto Media Streamer**: Replaced unauthenticated secondary sender pool with GramJS's native `iterDownload` stream engine. Resolves cross-DC authorization key errors and guarantees continuous, uninterrupted downloads across all media channels!
             - **🖼️ Application & Windows Taskbar Icon Fix**: Added `nativeImage` multi-format icon resolution (`icon.ico` / `icon.png`), ensuring the TeleFlow logo displays cleanly in the Windows Installer Header, App Title Bar, System Tray, and Taskbar!
             - **🐛 Fixed Queue Worker Concurrency Slider Reset**: Resolved issue where moving the Queue Worker Concurrency slider in Application Settings reset back to 1 upon saving. Concurrency setting is now permanently stored in SQLite and persisted across application restarts.
             - **🧹 Clean Release Installer Assets**: Streamlined release binaries to clean single setup installers (`.exe`, `.dmg`, `.AppImage`) and removed all intermediate blockmaps, metadata ymls, and duplicate packages.
