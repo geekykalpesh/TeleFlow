@@ -277,10 +277,15 @@ export class ScannerService {
       extension = media_type === 'text' || media_type === 'link' ? '.txt' : this.getExtensionFromMime(mime_type);
       filename = `telegram_${media_type}_${msg.id}${extension}`;
     } else {
-      filename = this.sanitizeFilename(filename);
-      if (media_type !== 'text' && media_type !== 'link') {
-        extension = path.extname(filename) || this.getExtensionFromMime(mime_type);
+      const parsedExt = path.extname(filename);
+      const hasValidExt = /^\.[a-zA-Z0-9]{1,8}$/.test(parsedExt);
+      if (!hasValidExt && media_type !== 'text' && media_type !== 'link') {
+        extension = this.getExtensionFromMime(mime_type);
+        filename = `${filename}${extension}`;
+      } else {
+        extension = hasValidExt ? parsedExt : this.getExtensionFromMime(mime_type);
       }
+      filename = this.sanitizeFilename(filename);
     }
 
     const isTextOrLink = media_type === 'text' || media_type === 'link';
@@ -425,10 +430,11 @@ export class ScannerService {
 
   private sanitizeFilename(name: string): string {
     const ext = path.extname(name);
-    const base = name.slice(0, name.length - ext.length);
+    const hasValidExt = /^\.[a-zA-Z0-9]{1,8}$/.test(ext);
+    const base = hasValidExt ? name.slice(0, name.length - ext.length) : name;
     const cleanBase = base.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim().replace(/\.+$/, '');
     const truncatedBase = cleanBase.substring(0, 80).trim().replace(/\.+$/, '');
-    return `${truncatedBase}${ext || '.bin'}`;
+    return `${truncatedBase}${hasValidExt ? ext : ''}`;
   }
 
   private sanitizeFolderName(name: string): string {

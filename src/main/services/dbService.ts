@@ -689,10 +689,13 @@ class DbService {
 
           const dir = path.dirname(finalPath);
           const filename = path.basename(finalPath);
-          const ext = path.extname(filename);
-          const base = filename.slice(0, filename.length - ext.length);
+          const rawExt = path.extname(filename);
+          const hasValidExt = /^\.[a-zA-Z0-9]{1,8}$/.test(rawExt);
+          const ext = hasValidExt ? rawExt : '';
+          const base = hasValidExt ? filename.slice(0, filename.length - ext.length) : filename;
           const cleanBase = base.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim().replace(/\.+$/, '').substring(0, 85);
-          const cleanFinalPath = path.join(dir, `${cleanBase}${ext}`);
+          const cleanExt = ext.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_');
+          const cleanFinalPath = path.join(dir, `${cleanBase}${cleanExt}`);
           const cleanOriginal = originalFilename.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim().substring(0, 85);
 
           this.db.run(`

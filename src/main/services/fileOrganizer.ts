@@ -4,18 +4,20 @@ import { dbService } from './dbService';
 import { DownloadItem } from '../../types';
 
 export class FileOrganizer {
-  public sanitizeFilename(name: string): string {
+  public sanitizeFilename(name: string, fallbackExt?: string): string {
     const ext = path.extname(name);
-    const base = name.slice(0, name.length - ext.length);
+    const hasValidExt = /^\.[a-zA-Z0-9]{1,8}$/.test(ext);
+    const effectiveExt = hasValidExt ? ext : (fallbackExt && /^\.[a-zA-Z0-9]{1,8}$/.test(fallbackExt) ? fallbackExt : '');
+    const base = hasValidExt && name.endsWith(ext) ? name.slice(0, name.length - ext.length) : name;
     const cleanBase = base.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim().replace(/\.+$/, '');
     const truncatedBase = cleanBase.substring(0, 80).trim().replace(/\.+$/, '');
-    return `${truncatedBase}${ext || '.bin'}`;
+    return `${truncatedBase}${effectiveExt}`;
   }
 
-  public sanitizePathFilename(filePath: string): string {
+  public sanitizePathFilename(filePath: string, fallbackExt?: string): string {
     const dir = path.dirname(filePath);
     const filename = path.basename(filePath);
-    const sanitized = this.sanitizeFilename(filename);
+    const sanitized = this.sanitizeFilename(filename, fallbackExt);
     return path.join(dir, sanitized);
   }
 
@@ -71,7 +73,7 @@ export class FileOrganizer {
     }
 
     // Ensure target path filename contains no illegal Windows characters (e.g. colons in timestamps)
-    let targetPath = this.sanitizePathFilename(item.final_path);
+    let targetPath = this.sanitizePathFilename(item.final_path, item.extension);
 
     const finalDir = path.dirname(targetPath);
     if (!fs.existsSync(finalDir)) {
