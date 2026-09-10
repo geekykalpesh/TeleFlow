@@ -19,21 +19,34 @@ export class FileOrganizer {
     return path.join(dir, sanitized);
   }
 
-  private safeMoveFile(src: string, dest: string, maxRetries: number = 5): void {
+  private async safeMoveFile(src: string, dest: string, maxRetries: number = 10): Promise<void> {
+    const destDir = path.dirname(dest);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+
     let attempt = 0;
+    let lastError: any = null;
+
     while (attempt < maxRetries) {
       try {
         fs.renameSync(src, dest);
         return;
       } catch (err: any) {
         attempt++;
+        lastError = err;
         const code = err?.code || '';
         const errMsg = String(err?.message || err);
 
+        // Cross-device link or cross-drive move
         if (code === 'EXDEV' || errMsg.includes('EXDEV')) {
-          fs.copyFileSync(src, dest);
-          try { fs.unlinkSync(src); } catch (e) {}
-          return;
+          try {
+            fs.copyFileSync(src, dest);
+            try { fs.unlinkSync(src); } catch (e) {}
+            return;
+          } catch (copyErr) {
+            lastError = copyErr;
+          }
         }
 
         if (attempt >= maxRetries) {
@@ -42,13 +55,12 @@ export class FileOrganizer {
             try { fs.unlinkSync(src); } catch (e) {}
             return;
           } catch (copyErr) {
-            throw err;
+            throw lastError || err;
           }
         }
 
-        // Wait 100ms for OS file lock on Windows to release before retry
-        const deSync = Date.now() + 100;
-        while (Date.now() < deSync) {}
+        // Asynchronously yield to the Node.js event loop (allowing OS file handles & Windows Defender locks to release)
+        await new Promise((resolve) => setTimeout(resolve, Math.min(1000, 200 * attempt)));
       }
     }
   }
@@ -74,7 +86,7 @@ export class FileOrganizer {
     }
 
     // Safe move supporting cross-device / cross-drive locations and retrying OS file locks
-    this.safeMoveFile(item.temp_path, targetPath);
+    await this.safeMoveFile(item.temp_path, targetPath);
 
     return targetPath;
   }
@@ -90,7 +102,7 @@ export class FileOrganizer {
         const newFinalPath = path.join(dir, `${item.formatted_sequence}_${originalBase}`);
 
         if (item.final_path !== newFinalPath && !fs.existsSync(newFinalPath)) {
-          this.safeMoveFile(item.final_path, newFinalPath);
+          await this.safeMoveFile(item.final_path, newFinalPath);
           dbService.updateItemFinalPath(item.id, newFinalPath);
         }
       }

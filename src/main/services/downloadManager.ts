@@ -305,6 +305,8 @@ export class DownloadManager {
 
       const startTime = Date.now();
 
+      let downloadCompleted = false;
+
       // Resume: detect existing temp file size for byte offset
       let startOffset = 0;
       if (fs.existsSync(item.temp_path)) {
@@ -317,7 +319,10 @@ export class DownloadManager {
           // If file already completed 100% on disk in temp folder, finalize immediately
           if (stat.size >= item.total_bytes && item.total_bytes > 0) {
             console.log(`[Resume Complete] Item #${item.sequence_number} is already 100% downloaded on disk. Finalizing...`);
+            downloadCompleted = true;
+            await new Promise((r) => setTimeout(r, 300));
             const finalLocation = await fileOrganizer.finalizeFile(item);
+            dbService.updateItemFinalPath(item.id, finalLocation);
             dbService.updateItemProgress(item.id, item.total_bytes, item.total_bytes, 0, 'COMPLETED');
             this.notifyProgress(item.id, 'COMPLETED', item.total_bytes, item.total_bytes, 0, undefined, finalLocation);
             if (this.activeTaskTokens.get(item.id) === runToken) {
@@ -328,7 +333,20 @@ export class DownloadManager {
             setTimeout(() => this.processQueue(), 100);
             return;
           }
-        } catch (e) {
+        } catch (e: any) {
+          if (downloadCompleted) {
+            console.error(`[Resume Finalize Failed] Item #${item.sequence_number}:`, e);
+            const errMsg = String(e.message || e);
+            dbService.updateItemProgress(item.id, item.total_bytes, item.total_bytes, 0, 'FAILED', `Failed to save file: ${errMsg}`);
+            this.notifyProgress(item.id, 'FAILED', item.total_bytes, item.total_bytes, 0, `Save failed: ${errMsg}`);
+            if (this.activeTaskTokens.get(item.id) === runToken) {
+              this.activeDownloads.delete(item.id);
+              this.activeTaskTokens.delete(item.id);
+              this.activeTaskPromises.delete(item.id);
+            }
+            setTimeout(() => this.processQueue(), 100);
+            return;
+          }
           startOffset = 0;
         }
       }
@@ -366,12 +384,18 @@ export class DownloadManager {
           startOffset
         );
 
+        // Download phase finished cleanly
+        downloadCompleted = true;
+
         // Post-check: If aborted or paused while download completed, do not finalize
         const postItem = dbService.getItemById(item.id);
         if (postItem?.status === 'PAUSED' || telegramClient.isDownloadAborted(item.id)) {
           console.log(`[Paused] Item #${item.sequence_number} was paused during transfer.`);
           return;
         }
+
+        // Give Windows OS 300ms grace period to fully close file handles / antivirus locks
+        await new Promise((r) => setTimeout(r, 300));
 
         // Download completed cleanly — move temp file to final destination
         const finalLocation = await fileOrganizer.finalizeFile(item);
@@ -393,6 +417,11 @@ export class DownloadManager {
             dbService.updateItemStatus(item.id, 'PAUSED');
             this.notifyProgress(item.id, 'PAUSED', downloaded, total, 0);
           }
+        } else if (downloadCompleted) {
+          // Transfer succeeded but final move/save failed: mark as FAILED directly without infinite re-download loop
+          console.error(`[Save Failed] Item #${item.sequence_number} downloaded successfully but failed to move:`, errMsg);
+          dbService.updateItemProgress(item.id, item.total_bytes, item.total_bytes, 0, 'FAILED', `Failed to save file to destination: ${errMsg}`);
+          this.notifyProgress(item.id, 'FAILED', item.total_bytes, item.total_bytes, 0, `Failed to save file to destination: ${errMsg}`);
         } else {
           console.error(`[Failed] Item #${item.sequence_number}:`, errMsg);
 

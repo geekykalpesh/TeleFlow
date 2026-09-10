@@ -647,9 +647,12 @@ class TelegramClientService {
 
         // Align startOffset down to 4096-byte (4KB) boundary for GramJS/Telegram API compliance
         let accumulatedBytes = Math.floor(startOffset / 4096) * 4096;
-        if (accumulatedBytes < startOffset && fs.existsSync(targetTempPath)) {
+        if (fs.existsSync(targetTempPath)) {
           try {
-            fs.truncateSync(targetTempPath, accumulatedBytes);
+            const currentSize = fs.statSync(targetTempPath).size;
+            if (currentSize > accumulatedBytes) {
+              fs.truncateSync(targetTempPath, accumulatedBytes);
+            }
           } catch (e) {}
         }
 
