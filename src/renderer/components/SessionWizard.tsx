@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TelegramChat, ScanOptions, MediaType } from '../../types';
 import { Folder, Search, Sliders, CheckSquare, X, ListOrdered, Filter } from 'lucide-react';
+import { parseTelegramLink } from '../../main/utils/telegramLink';
 
 interface SessionWizardProps {
   onClose: () => void;
@@ -158,9 +159,23 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
     }
   };
 
-  const filteredDialogs = dialogs.filter((d) =>
-    d.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const parsedSearch = parseTelegramLink(searchQuery);
+  const filteredDialogs = dialogs.filter((d) => {
+    if (!searchQuery.trim()) return true;
+    const term = searchQuery.toLowerCase().trim();
+    if (parsedSearch.chatId) {
+      const cleanTarget = parsedSearch.chatId.replace(/^-100/, '');
+      const cleanDId = d.id.replace(/^-100/, '');
+      if (cleanDId === cleanTarget || d.id === parsedSearch.chatId || (d.username && d.username.toLowerCase() === parsedSearch.chatId.toLowerCase())) {
+        return true;
+      }
+    }
+    return (
+      d.title.toLowerCase().includes(term) ||
+      (d.username && d.username.toLowerCase().includes(term)) ||
+      d.id.includes(term)
+    );
+  });
 
   return (
     <div className="modal-overlay">

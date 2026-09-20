@@ -6,6 +6,8 @@ import {
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader, AlertTriangle, Download, Link
 } from 'lucide-react';
 
+import { parseTelegramLink } from '../../main/utils/telegramLink';
+
 interface ChannelExplorerProps {
   onSessionCreated: () => void;
 }
@@ -55,8 +57,6 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
   const stopAutoLoadRef = React.useRef(false);
 
   const getApi = () => {
-
-
     const api = (window as any).electronAPI;
     if (!api) throw new Error('Electron API not initialized. Run TeleFlow Desktop.');
     return api;
@@ -71,6 +71,19 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
       const api = getApi();
       const res = await api.searchChats(query);
       setChats(res || []);
+
+      if (res && res.length === 1 && query.trim().length > 0) {
+        const parsed = parseTelegramLink(query);
+        if (parsed.topicId) {
+          setActiveTopicId(parsed.topicId);
+        }
+        if (parsed.messageId) {
+          setFromMsgId(String(parsed.messageId));
+        }
+        if (parsed.chatId) {
+          handleGoInsideGroup(res[0], parsed.topicId || undefined);
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to search Telegram chats');
     } finally {

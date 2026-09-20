@@ -81,23 +81,32 @@ export class ScannerService {
 
     filteredMessages.forEach((msg: any) => {
       const mediaInfo = this.extractMediaDetails(msg);
+      const textInfo = this.extractTextAndResources(msg);
 
-      if (media_types && media_types.length > 0 && !media_types.includes(mediaInfo.media_type)) {
-        return;
+      const isMediaMessage = mediaInfo.media_type !== 'text' && mediaInfo.media_type !== 'link';
+
+      if (media_types && media_types.length > 0) {
+        const allowsMedia = isMediaMessage && media_types.includes(mediaInfo.media_type);
+        const allowsText = !isMediaMessage && (media_types.includes('text') || media_types.includes('link'));
+        if (!allowsMedia && !allowsText) {
+          return;
+        }
       }
 
       // File Size Filter
-      if (options.min_file_size_mb !== undefined && options.min_file_size_mb > 0) {
-        const minBytes = options.min_file_size_mb * 1024 * 1024;
-        if (mediaInfo.size < minBytes) return;
-      }
-      if (options.max_file_size_mb !== undefined && options.max_file_size_mb > 0) {
-        const maxBytes = options.max_file_size_mb * 1024 * 1024;
-        if (mediaInfo.size > maxBytes) return;
+      if (isMediaMessage) {
+        if (options.min_file_size_mb !== undefined && options.min_file_size_mb > 0) {
+          const minBytes = options.min_file_size_mb * 1024 * 1024;
+          if (mediaInfo.size < minBytes) return;
+        }
+        if (options.max_file_size_mb !== undefined && options.max_file_size_mb > 0) {
+          const maxBytes = options.max_file_size_mb * 1024 * 1024;
+          if (mediaInfo.size > maxBytes) return;
+        }
       }
 
       // Keyword / Caption Filter
-      const searchText = `${mediaInfo.filename} ${mediaInfo.text_content || ''} ${msg.message || ''}`.toLowerCase();
+      const searchText = `${mediaInfo.filename} ${textInfo.fullText} ${msg.message || ''}`.toLowerCase();
 
       if (options.include_keywords && options.include_keywords.trim().length > 0) {
         const includes = options.include_keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
@@ -132,45 +141,88 @@ export class ScannerService {
         : path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title));
 
       const topicKey = msgTopicTitle || 'main';
-      const seqNumber = (topicSeqCounters.get(topicKey) || 0) + 1;
+
+      // 1. Process primary item (media file or standalone text file)
+      let seqNumber = (topicSeqCounters.get(topicKey) || 0) + 1;
       topicSeqCounters.set(topicKey, seqNumber);
 
       const formattedSeq = String(seqNumber).padStart(3, '0');
       const tempPath = path.join(itemFolder, '.temp', `${sessionId}_${msg.id}.part`);
-      const finalFileName = `${formattedSeq}_${this.sanitizeFilename(mediaInfo.filename)}`;
+      
+      const primaryTitle = isMediaMessage ? mediaInfo.filename : `${this.generateTextTitle(textInfo.fullText, msg.id)}.txt`;
+      const finalFileName = `${formattedSeq}_${this.sanitizeFilename(primaryTitle)}`;
       const finalPath = path.join(itemFolder, finalFileName);
 
-      // Skip Existing Files on Disk
-      if (options.skip_existing_files) {
-        if (fs.existsSync(finalPath) || fs.existsSync(tempPath)) {
-          return;
-        }
+      const shouldSkipPrimary = options.skip_existing_files && (fs.existsSync(finalPath) || fs.existsSync(tempPath));
+
+      if (!shouldSkipPrimary) {
+        downloadItems.push({
+          id: `item_${sessionId}_${msg.id}${isMediaMessage ? '_media' : ''}`,
+          session_id: sessionId,
+          chat_id: effectiveChatId,
+          chat_title: chat_title,
+          topic_id: msgTopicId,
+          topic_title: msgTopicTitle,
+          message_id: msg.id,
+          sequence_number: seqNumber,
+          formatted_sequence: formattedSeq,
+          media_type: mediaInfo.media_type,
+          original_filename: primaryTitle,
+          extension: isMediaMessage ? mediaInfo.extension : '.txt',
+          mime_type: isMediaMessage ? mediaInfo.mime_type : 'text/plain',
+          telegram_file_id: String(msg.id),
+          total_bytes: isMediaMessage ? mediaInfo.size : Buffer.byteLength(textInfo.fullText, 'utf-8'),
+          downloaded_bytes: 0,
+          speed_bps: 0,
+          status: 'QUEUED',
+          temp_path: tempPath,
+          final_path: finalPath,
+          text_content: isMediaMessage ? undefined : textInfo.fullText,
+          created_at: new Date().toISOString()
+        });
       }
 
-      downloadItems.push({
-        id: `item_${sessionId}_${msg.id}`,
-        session_id: sessionId,
-        chat_id: effectiveChatId,
-        chat_title: chat_title,
-        topic_id: msgTopicId,
-        topic_title: msgTopicTitle,
-        message_id: msg.id,
-        sequence_number: seqNumber,
-        formatted_sequence: formattedSeq,
-        media_type: mediaInfo.media_type,
-        original_filename: mediaInfo.filename,
-        extension: mediaInfo.extension,
-        mime_type: mediaInfo.mime_type,
-        telegram_file_id: String(msg.id),
-        total_bytes: mediaInfo.size,
-        downloaded_bytes: 0,
-        speed_bps: 0,
-        status: 'QUEUED',
-        temp_path: tempPath,
-        final_path: finalPath,
-        text_content: mediaInfo.text_content,
-        created_at: new Date().toISOString()
-      });
+      // 2. If message HAS binary media AND ALSO HAS text/resources, save post text/resources in sequence!
+      const shouldSavePostText = options.save_post_text !== false;
+      if (isMediaMessage && textInfo.hasContent && shouldSavePostText) {
+        seqNumber = (topicSeqCounters.get(topicKey) || 0) + 1;
+        topicSeqCounters.set(topicKey, seqNumber);
+
+        const textFormattedSeq = String(seqNumber).padStart(3, '0');
+        const textBaseName = `${path.parse(this.sanitizeFilename(mediaInfo.filename)).name}_info.txt`;
+        const textFinalFileName = `${textFormattedSeq}_${textBaseName}`;
+        const textFinalPath = path.join(itemFolder, textFinalFileName);
+
+        const shouldSkipText = options.skip_existing_files && fs.existsSync(textFinalPath);
+
+        if (!shouldSkipText) {
+          const textBytes = Buffer.byteLength(textInfo.fullText, 'utf-8');
+          downloadItems.push({
+            id: `item_${sessionId}_${msg.id}_info`,
+            session_id: sessionId,
+            chat_id: effectiveChatId,
+            chat_title: chat_title,
+            topic_id: msgTopicId,
+            topic_title: msgTopicTitle,
+            message_id: msg.id,
+            sequence_number: seqNumber,
+            formatted_sequence: textFormattedSeq,
+            media_type: 'text',
+            original_filename: textBaseName,
+            extension: '.txt',
+            mime_type: 'text/plain',
+            telegram_file_id: String(msg.id),
+            total_bytes: textBytes,
+            downloaded_bytes: 0,
+            speed_bps: 0,
+            status: 'QUEUED',
+            temp_path: textFinalPath,
+            final_path: textFinalPath,
+            text_content: textInfo.fullText,
+            created_at: new Date().toISOString()
+          });
+        }
+      }
     });
 
     const session: DownloadSession = {
@@ -226,6 +278,68 @@ export class ScannerService {
     }
 
     return sessions;
+  }
+
+  public extractTextAndResources(msg: any): { fullText: string; hasContent: boolean; resourceUrls: Array<{ text: string; url: string }> } {
+    const rawText = (msg ? msg.message : '') || '';
+    const entities = (msg ? msg.entities : []) || [];
+    const resourceUrls: Array<{ text: string; url: string }> = [];
+
+    if (!rawText.trim() && (!entities || entities.length === 0)) {
+      return { fullText: '', hasContent: false, resourceUrls: [] };
+    }
+
+    const inlineLinks: Array<{ offset: number; length: number; text: string; url: string }> = [];
+
+    for (const entity of entities) {
+      const className = entity.className || entity.constructor?.name || '';
+      if (className === 'MessageEntityTextUrl' || className === 'Api.MessageEntityTextUrl') {
+        const anchorText = rawText.substring(entity.offset, entity.offset + entity.length);
+        const url = entity.url;
+        if (url) {
+          resourceUrls.push({ text: anchorText || 'Resource', url });
+          inlineLinks.push({ offset: entity.offset, length: entity.length, text: anchorText, url });
+        }
+      } else if (className === 'MessageEntityUrl' || className === 'Api.MessageEntityUrl') {
+        const urlText = rawText.substring(entity.offset, entity.offset + entity.length);
+        if (urlText) {
+          resourceUrls.push({ text: 'Link', url: urlText });
+        }
+      }
+    }
+
+    const urlRegex = /(https?:\/\/[^\s<>"']+)/gi;
+    let match;
+    while ((match = urlRegex.exec(rawText)) !== null) {
+      const url = match[1];
+      if (!resourceUrls.some(r => r.url === url)) {
+        resourceUrls.push({ text: 'Link', url });
+      }
+    }
+
+    inlineLinks.sort((a, b) => b.offset - a.offset);
+    let formattedBody = rawText;
+    for (const link of inlineLinks) {
+      const before = formattedBody.substring(0, link.offset);
+      const after = formattedBody.substring(link.offset + link.length);
+      const expanded = `${link.text} (${link.url})`;
+      formattedBody = before + expanded + after;
+    }
+
+    let output = formattedBody.trim();
+
+    if (resourceUrls.length > 0) {
+      output += `\n\n${'=' .repeat(50)}\n📌 EXTRACTED RESOURCES & LINKS (${resourceUrls.length}):\n${'='.repeat(50)}\n`;
+      resourceUrls.forEach((r, idx) => {
+        output += `[${idx + 1}] ${r.text !== 'Link' ? r.text + ' » ' : ''}${r.url}\n`;
+      });
+    }
+
+    return {
+      fullText: output,
+      hasContent: output.trim().length > 0,
+      resourceUrls
+    };
   }
 
   private extractMediaDetails(msg: any): { filename: string; extension: string; mime_type: string; size: number; media_type: MediaType; text_content?: string } {
@@ -360,39 +474,76 @@ export class ScannerService {
     const padding = Math.max(session.sequence_padding || 3, String(maxSeqNumber + validNewMessages.length).length);
     const newItems: DownloadItem[] = [];
 
-    validNewMessages.forEach((msg: any, index: number) => {
-      const seqNumber = maxSeqNumber + index + 1;
-      const formattedSeq = String(seqNumber).padStart(padding, '0');
-      const mediaInfo = this.extractMediaDetails(msg);
+    let currentSeq = maxSeqNumber;
 
+    validNewMessages.forEach((msg: any) => {
+      const mediaInfo = this.extractMediaDetails(msg);
+      const textInfo = this.extractTextAndResources(msg);
+      const isMediaMessage = mediaInfo.media_type !== 'text' && mediaInfo.media_type !== 'link';
+
+      currentSeq += 1;
+      const formattedSeq = String(currentSeq).padStart(padding, '0');
       const tempFileName = `${sessionId}_${msg.id}.part`;
       const tempPath = path.join(tempDir, tempFileName);
 
-      const finalFileName = `${formattedSeq}_${this.sanitizeFilename(mediaInfo.filename)}`;
+      const primaryTitle = isMediaMessage ? mediaInfo.filename : `${this.generateTextTitle(textInfo.fullText, msg.id)}.txt`;
+      const finalFileName = `${formattedSeq}_${this.sanitizeFilename(primaryTitle)}`;
       const finalPath = path.join(defaultBaseDir, finalFileName);
 
       newItems.push({
-        id: `item_${sessionId}_${msg.id}`,
+        id: `item_${sessionId}_${msg.id}${isMediaMessage ? '_media' : ''}`,
         session_id: sessionId,
         chat_id: session.chat_id,
         chat_title: session.chat_title,
         message_id: msg.id,
-        sequence_number: seqNumber,
+        sequence_number: currentSeq,
         formatted_sequence: formattedSeq,
         media_type: mediaInfo.media_type,
-        original_filename: mediaInfo.filename,
-        extension: mediaInfo.extension,
-        mime_type: mediaInfo.mime_type,
+        original_filename: primaryTitle,
+        extension: isMediaMessage ? mediaInfo.extension : '.txt',
+        mime_type: isMediaMessage ? mediaInfo.mime_type : 'text/plain',
         telegram_file_id: String(msg.id),
-        total_bytes: mediaInfo.size,
+        total_bytes: isMediaMessage ? mediaInfo.size : Buffer.byteLength(textInfo.fullText, 'utf-8'),
         downloaded_bytes: 0,
         speed_bps: 0,
         status: 'QUEUED',
         temp_path: tempPath,
         final_path: finalPath,
-        text_content: mediaInfo.text_content,
+        text_content: isMediaMessage ? undefined : textInfo.fullText,
         created_at: new Date().toISOString()
       });
+
+      if (isMediaMessage && textInfo.hasContent) {
+        currentSeq += 1;
+        const textFormattedSeq = String(currentSeq).padStart(padding, '0');
+        const textBaseName = `${path.parse(this.sanitizeFilename(mediaInfo.filename)).name}_info.txt`;
+        const textFinalFileName = `${textFormattedSeq}_${textBaseName}`;
+        const textFinalPath = path.join(defaultBaseDir, textFinalFileName);
+
+        const textBytes = Buffer.byteLength(textInfo.fullText, 'utf-8');
+        newItems.push({
+          id: `item_${sessionId}_${msg.id}_info`,
+          session_id: sessionId,
+          chat_id: session.chat_id,
+          chat_title: session.chat_title,
+          message_id: msg.id,
+          sequence_number: currentSeq,
+          formatted_sequence: textFormattedSeq,
+          media_type: 'text',
+          original_filename: textBaseName,
+          extension: '.txt',
+          mime_type: 'text/plain',
+          telegram_file_id: String(msg.id),
+          total_bytes: textBytes,
+          downloaded_bytes: 0,
+          speed_bps: 0,
+          status: 'QUEUED',
+          temp_path: textFinalPath,
+          final_path: textFinalPath,
+          text_content: textInfo.fullText,
+          created_at: new Date().toISOString()
+        });
+      }
     });
 
     if (newItems.length > 0) {

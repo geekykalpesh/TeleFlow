@@ -123,6 +123,7 @@ export interface ScanOptions {
   include_keywords?: string;
   exclude_keywords?: string;
   skip_existing_files?: boolean;
+  save_post_text?: boolean;
 }
 
 export interface AppSettings {

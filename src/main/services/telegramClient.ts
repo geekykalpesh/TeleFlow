@@ -4,6 +4,7 @@ import bigInt from 'big-integer';
 import { dbService } from './dbService';
 import { downloadManager } from './downloadManager';
 import { TelegramAuthStatus, TelegramChat, TelegramUser, GroupMessageItem, MediaType, TelegramForumTopic } from '../../types';
+import { parseTelegramLink } from '../utils/telegramLink';
 import path from 'path';
 import fs from 'fs';
 
@@ -286,8 +287,51 @@ class TelegramClientService {
     if (!this.client) throw new Error('Telegram client is not connected.');
     if (!query || query.trim() === '') return this.getDialogs();
 
+    const cleanQuery = query.trim();
+    const parsed = parseTelegramLink(cleanQuery);
+    const dialogs = await this.getDialogs();
+
+    if (parsed.chatId) {
+      const rawTarget = parsed.chatId.replace(/^-100/, '');
+      // 1. Check if channel is already present in user's dialogs
+      const localMatches = dialogs.filter((d) => {
+        const cleanDId = d.id.replace(/^-100/, '');
+        return cleanDId === rawTarget || d.id === parsed.chatId || (d.username && d.username.toLowerCase() === parsed.chatId?.toLowerCase());
+      });
+
+      if (localMatches.length > 0) {
+        return localMatches;
+      }
+
+      // 2. If not found in local dialogs, resolve entity directly from Telegram
+      try {
+        const entity = await this.resolveEntity(parsed.chatId);
+        if (entity) {
+          const chatEntity = entity as any;
+          let type: 'channel' | 'group' | 'user' | 'chat' = 'channel';
+          if (chatEntity.megagroup) type = 'group';
+          else if (chatEntity.broadcast) type = 'channel';
+
+          const resolvedChat: TelegramChat = {
+            id: chatEntity.id ? (chatEntity.id.toString().startsWith('-100') ? chatEntity.id.toString() : `-100${chatEntity.id}`) : parsed.chatId,
+            title: chatEntity.title || chatEntity.firstName || 'Telegram Channel',
+            username: chatEntity.username || '',
+            type,
+            isForum: !!chatEntity.forum,
+            unreadCount: 0,
+            hasMedia: true,
+            participantsCount: chatEntity.participantsCount || 0
+          };
+          return [resolvedChat];
+        }
+      } catch (err) {
+        console.warn(`[searchChats] Direct entity resolution failed for ${parsed.chatId}:`, err);
+      }
+    }
+
+    // 3. Fallback: query Telegram contacts search
     try {
-      const result = await this.client.invoke(new Api.contacts.Search({ q: query, limit: 20 }));
+      const result = await this.client.invoke(new Api.contacts.Search({ q: cleanQuery, limit: 20 }));
       const chats: TelegramChat[] = [];
       if (result.chats) {
         for (const c of result.chats) {
@@ -296,7 +340,7 @@ class TelegramClientService {
           if (chatEntity.broadcast) type = 'channel';
           else if (chatEntity.megagroup) type = 'group';
           chats.push({
-            id: chatEntity.id ? chatEntity.id.toString() : '0',
+            id: chatEntity.id ? (chatEntity.id.toString().startsWith('-100') ? chatEntity.id.toString() : `-100${chatEntity.id}`) : '0',
             title: chatEntity.title || 'Unnamed Group',
             username: chatEntity.username || '',
             type,
@@ -307,15 +351,18 @@ class TelegramClientService {
           });
         }
       }
-      return chats;
+      if (chats.length > 0) return chats;
     } catch (err) {
       console.warn('Search contacts failed, falling back to local dialog search:', err);
-      const dialogs = await this.getDialogs();
-      return dialogs.filter((d) =>
-        d.title.toLowerCase().includes(query.toLowerCase()) ||
-        (d.username && d.username.toLowerCase().includes(query.toLowerCase()))
-      );
     }
+
+    // 4. Fallback: filter local dialogs by title or username or ID
+    const filterTerm = cleanQuery.toLowerCase();
+    return dialogs.filter((d) =>
+      d.title.toLowerCase().includes(filterTerm) ||
+      (d.username && d.username.toLowerCase().includes(filterTerm)) ||
+      d.id.includes(filterTerm)
+    );
   }
 
   public async getForumTopics(chatId: string): Promise<TelegramForumTopic[]> {
