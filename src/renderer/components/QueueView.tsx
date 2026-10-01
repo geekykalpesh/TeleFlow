@@ -1254,86 +1254,37 @@ export const QueueView: React.FC<QueueViewProps> = ({
                           const canResume = sPaused > 0 || hasFailed;
                           const cardAccent = isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#334155';
 
-                          return (
                             <div
                               key={session.id}
                               style={{
-                                background: 'rgba(255,255,255,0.03)', border: `1px solid ${cardAccent}35`, borderRadius: '10px', padding: '12px 16px',
-                                borderLeft: `4px solid ${cardAccent}`, display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer'
+                                background: 'rgba(255,255,255,0.03)', border: `1px solid ${cardAccent}35`, borderRadius: '6px', padding: '8px 12px',
+                                borderLeft: `3px solid ${cardAccent}`, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer'
                               }}
                               onClick={() => handleSelectChannel(session.id)}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                                    <h4 style={{ fontSize: '0.88rem', fontWeight: 700, margin: 0, color: '#fff' }}>
-                                      📂 {session.topic_title || session.title}
-                                    </h4>
-                                    {session.download_enabled === false && (
-                                      <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '12px', background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}>
-                                        ⏸ DOWNLOAD OFF
-                                      </span>
-                                    )}
-                                    {session.sync_enabled === false && (
-                                      <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '12px', background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)' }}>
-                                        🚫 SYNC OFF
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>
-                                    Folder: <span style={{ fontFamily: 'var(--font-mono)', color: '#00d4ff' }}>{session.destination_path}</span>
-                                  </p>
+                              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <h4 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    📂 {session.topic_title || session.title}
+                                  </h4>
+                                  <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '12px', background: isComplete ? 'rgba(16,185,129,0.2)' : isActive ? 'rgba(0,212,255,0.18)' : isPaused ? 'rgba(245,158,11,0.2)' : hasFailed ? 'rgba(239,68,68,0.18)' : 'rgba(100,116,139,0.18)', color: isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#64748b' }}>
+                                    {isComplete ? 'COMPLETED' : isActive ? 'DOWNLOADING' : isPaused ? 'PAUSED' : hasFailed ? 'FAILED' : 'QUEUED'}
+                                  </span>
                                 </div>
-                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                  {canPause && !isComplete && (
-                                    <button onClick={e => handlePauseSession(session.id, e)} style={{ padding: '4px 8px', fontSize: '0.72rem' }} className="btn btn-secondary">
-                                      <Pause size={12} /> Pause
-                                    </button>
-                                  )}
-                                  {canResume && !isComplete && (
-                                    <button onClick={e => handleResumeSession(session.id, e)} style={{ padding: '4px 8px', fontSize: '0.72rem' }} className="btn btn-primary">
-                                      <Play size={12} /> Resume
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={e => handleToggleDownloadSession(session.id, session.download_enabled, e)}
-                                    style={{
-                                      padding: '4px 8px', fontSize: '0.72rem', gap: '4px',
-                                      color: session.download_enabled === false ? '#f59e0b' : '#fff',
-                                      borderColor: session.download_enabled === false ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.15)'
-                                    }}
-                                    className="btn btn-secondary"
-                                    title={session.download_enabled === false ? "Enable download" : "Disable download"}
-                                  >
-                                    {session.download_enabled === false ? 'Enable Download' : 'Disable Download'}
-                                  </button>
-                                  <button
-                                    onClick={e => handleToggleSyncSession(session.id, session.sync_enabled, e)}
-                                    style={{
-                                      padding: '4px 8px', fontSize: '0.72rem', gap: '4px',
-                                      color: session.sync_enabled === false ? '#ef4444' : '#00d4ff',
-                                      borderColor: session.sync_enabled === false ? 'rgba(239,68,68,0.4)' : 'rgba(0,212,255,0.3)'
-                                    }}
-                                    className="btn btn-secondary"
-                                    title={session.sync_enabled === false ? "Enable sync" : "Disable sync"}
-                                  >
-                                    {session.sync_enabled === false ? 'Sync: OFF' : 'Sync: ON'}
-                                  </button>
-                                  <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.72rem' }}>
-                                    Open Topic Page <ChevronRight size={13} />
-                                  </button>
-                                  <button
-                                    onClick={e => handlePromptDeleteCard(session, e)}
-                                    className="btn btn-secondary"
-                                    style={{ padding: '4px 8px', fontSize: '0.72rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
-                                    title="Delete this topic card"
-                                  >
-                                    <Trash2 size={12} color="#ef4444" /> Delete
-                                  </button>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                  <span style={{ fontFamily: 'var(--font-mono)' }}>{formatSize(sessionDownloaded)} / {formatSize(sessionTotal)} ({pct}%)</span>
+                                  <span><strong style={{ color: '#10b981' }}>{sDone}</strong>/{sTotal} files</span>
+                                </div>
+                                <div style={{ height: '3px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, transition: 'width 0.3s ease' }} />
                                 </div>
                               </div>
-                              <div style={{ height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, transition: 'width 0.3s ease' }} />
+
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                                {canPause && !isComplete && <button onClick={e => handlePauseSession(session.id, e)} className="btn btn-secondary" style={{ padding: '4px' }}><Pause size={12} /></button>}
+                                {canResume && !isComplete && <button onClick={e => handleResumeSession(session.id, e)} className="btn btn-primary" style={{ padding: '4px' }}><Play size={12} /></button>}
+                                <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-secondary" style={{ padding: '4px' }}><ChevronRight size={12} /></button>
+                                <button onClick={e => handlePromptDeleteCard(session, e)} className="btn btn-secondary" style={{ padding: '4px', color: '#ef4444' }}><Trash2 size={12} color="#ef4444" /></button>
                               </div>
                             </div>
                           );
@@ -1372,140 +1323,52 @@ export const QueueView: React.FC<QueueViewProps> = ({
                   key={session.id}
                   className="glass-panel"
                   style={{
-                    borderRadius: '14px', overflow: 'hidden', cursor: 'pointer',
-                    border: `1px solid ${cardAccent}45`,
-                    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                    boxShadow: isActive ? `0 0 20px ${cardAccent}18` : 'none',
-                    flexShrink: 0,
-                    minHeight: '120px'
+                    borderRadius: '8px', overflow: 'hidden', cursor: 'pointer',
+                    border: `1px solid rgba(255,255,255,0.05)`, borderLeft: `4px solid ${cardAccent}`,
+                    transition: 'all 0.15s ease', boxShadow: isActive ? `0 0 15px ${cardAccent}18` : 'none',
+                    background: isActive ? `rgba(0, 212, 255, 0.03)` : undefined, flexShrink: 0
                   }}
                   onClick={() => handleSelectChannel(session.id)}
                 >
-                  <div style={{ height: '3px', background: cardAccent, opacity: 0.9 }} />
-                  <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
-                        <div style={{
-                          width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0,
-                          background: `linear-gradient(135deg, ${cardAccent}35, ${cardAccent}10)`,
-                          border: `1px solid ${cardAccent}35`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem'
-                        }}>
-                          {isComplete ? '✅' : isActive ? '⬇️' : isPaused ? '⏸️' : hasFailed ? '⚠️' : '📁'}
-                        </div>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                            <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {session.title}
-                            </h3>
-                            <span style={{
-                              fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px',
-                              background: isComplete ? 'rgba(16,185,129,0.2)' : isActive ? 'rgba(0,212,255,0.18)' : isPaused ? 'rgba(245,158,11,0.2)' : hasFailed ? 'rgba(239,68,68,0.18)' : 'rgba(100,116,139,0.18)',
-                              color: isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#64748b'
-                            }}>
-                              {isComplete ? '✓ COMPLETED' : isActive ? `⬇ DOWNLOADING (${sDownloading})` : isPaused ? '⏸ PAUSED' : hasFailed ? `✗ ${sFailed} FAILED` : 'QUEUED'}
-                            </span>
-                            {session.download_enabled === false && (
-                              <span style={{
-                                fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px',
-                                background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)'
-                              }}>
-                                ⏸ DOWNLOAD OFF
-                              </span>
-                            )}
-                            {session.sync_enabled === false && (
-                              <span style={{
-                                fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px',
-                                background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)'
-                              }}>
-                                🚫 AUTO-SYNC OFF
-                              </span>
-                            )}
-                          </div>
-                          <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            📡 {session.chat_title} · <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: '#00d4ff' }}>{session.destination_path}</span>
-                          </p>
-                        </div>
+                  <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap' }}>
+                    
+                    <div style={{ width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0, background: `linear-gradient(135deg, ${cardAccent}35, ${cardAccent}10)`, border: `1px solid ${cardAccent}35`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+                      {isComplete ? '✅' : isActive ? '⬇️' : isPaused ? '⏸️' : hasFailed ? '⚠️' : '📁'}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</h3>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: isComplete ? 'rgba(16,185,129,0.2)' : isActive ? 'rgba(0,212,255,0.18)' : isPaused ? 'rgba(245,158,11,0.2)' : hasFailed ? 'rgba(239,68,68,0.18)' : 'rgba(100,116,139,0.18)', color: isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#64748b' }}>
+                          {isComplete ? 'COMPLETED' : isActive ? 'DOWNLOADING' : isPaused ? 'PAUSED' : hasFailed ? 'FAILED' : 'QUEUED'}
+                        </span>
+                        {session.download_enabled === false && <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}>⏸ DL OFF</span>}
+                        {session.sync_enabled === false && <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '20px', background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)' }}>🚫 SYNC OFF</span>}
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📡 {session.chat_title}</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)' }}>{formatSize(sessionDownloaded)} / {formatSize(sessionTotal)} ({pct}%)</span>
+                        {sessionSpeed > 0 && <span style={{ color: '#00d4ff', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>↓ {formatSpeed(sessionSpeed)}</span>}
+                        <span><strong style={{ color: '#10b981' }}>{sDone}</strong>/{sTotal} files</span>
+                        {hasFailed && <span><strong style={{ color: '#ef4444' }}>{sFailed}</strong> failed</span>}
                       </div>
 
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                        {canPause && !isComplete && (
-                          <button onClick={e => handlePauseSession(session.id, e)} style={{ padding: '6px 12px', fontSize: '0.78rem' }} className="btn btn-secondary">
-                            <Pause size={13} /> Pause
-                          </button>
-                        )}
-                        {canResume && !isComplete && (
-                          <button onClick={e => handleResumeSession(session.id, e)} style={{ padding: '6px 12px', fontSize: '0.78rem' }} className="btn btn-primary">
-                            <Play size={13} /> Resume
-                          </button>
-                        )}
-
-                        <button
-                          onClick={e => handleToggleDownloadSession(session.id, session.download_enabled, e)}
-                          style={{
-                            padding: '6px 10px', fontSize: '0.78rem', gap: '4px',
-                            color: session.download_enabled === false ? '#f59e0b' : '#fff',
-                            borderColor: session.download_enabled === false ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.15)'
-                          }}
-                          className="btn btn-secondary"
-                          title={session.download_enabled === false ? "Enable downloading for this card" : "Disable downloading for this card"}
-                        >
-                          {session.download_enabled === false ? <Play size={13} color="#f59e0b" /> : <Pause size={13} color="#94a3b8" />}
-                          {session.download_enabled === false ? 'Enable Download' : 'Disable Download'}
-                        </button>
-
-                        <button
-                          onClick={e => handleToggleSyncSession(session.id, session.sync_enabled, e)}
-                          style={{
-                            padding: '6px 10px', fontSize: '0.78rem', gap: '4px',
-                            color: session.sync_enabled === false ? '#ef4444' : '#00d4ff',
-                            borderColor: session.sync_enabled === false ? 'rgba(239,68,68,0.4)' : 'rgba(0,212,255,0.3)'
-                          }}
-                          className="btn btn-secondary"
-                          title={session.sync_enabled === false ? "Enable auto-sync for this channel card" : "Disable auto-sync for this channel card"}
-                        >
-                          <RefreshCw size={13} color={session.sync_enabled === false ? '#ef4444' : '#00d4ff'} />
-                          {session.sync_enabled === false ? 'Sync: OFF' : 'Sync: ON'}
-                        </button>
-
-                        <button onClick={e => handleSyncChannel(session.id, e)} disabled={syncingSessionId === session.id} style={{ padding: '6px 12px', fontSize: '0.78rem' }} className="btn btn-secondary">
-                          <RefreshCw size={13} className={syncingSessionId === session.id ? 'spin' : ''} /> {syncingSessionId === session.id ? 'Syncing...' : 'Sync'}
-                        </button>
-
-                        <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700 }}>
-                          Open Channel Page <ChevronRight size={14} />
-                        </button>
-
-                        <button
-                          onClick={e => handlePromptDeleteCard(session, e)}
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 10px', fontSize: '0.78rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }}
-                          title="Delete this channel card"
-                        >
-                          <Trash2 size={13} color="#ef4444" /> Delete Card
-                        </button>
+                      <div style={{ height: '4px', background: 'rgba(255,255,255,0.07)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, borderRadius: '4px', transition: 'width 0.4s ease' }} />
                       </div>
                     </div>
 
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', marginBottom: '5px' }}>
-                        <div style={{ display: 'flex', gap: '14px', color: 'var(--text-muted)' }}>
-                          <span><strong style={{ color: '#10b981' }}>{sDone}</strong> done</span>
-                          {sDownloading > 0 && <span><strong style={{ color: '#00d4ff' }}>{sDownloading}</strong> active</span>}
-                          {sQueued > 0 && <span><strong>{sQueued}</strong> queued</span>}
-                          {sPaused > 0 && <span><strong style={{ color: '#f59e0b' }}>{sPaused}</strong> paused</span>}
-                          {sFailed > 0 && <span><strong style={{ color: '#ef4444' }}>{sFailed}</strong> failed</span>}
-                        </div>
-                        <div style={{ display: 'flex', gap: '12px', fontFamily: 'var(--font-mono)' }}>
-                          {sessionSpeed > 0 && <span style={{ color: '#00d4ff', fontWeight: 700 }}>↓ {formatSpeed(sessionSpeed)}</span>}
-                          <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{formatSize(sessionDownloaded)} / {formatSize(sessionTotal)}</span>
-                          <span style={{ fontWeight: 800, color: cardAccent }}>{pct}%</span>
-                        </div>
-                      </div>
-                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.07)', borderRadius: '6px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, borderRadius: '6px', transition: 'width 0.4s ease' }} />
-                      </div>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                      {canPause && !isComplete && <button onClick={e => handlePauseSession(session.id, e)} className="btn btn-secondary" style={{ padding: '6px' }} title="Pause"><Pause size={14} /></button>}
+                      {canResume && !isComplete && <button onClick={e => handleResumeSession(session.id, e)} className="btn btn-primary" style={{ padding: '6px' }} title="Resume"><Play size={14} /></button>}
+                      <button onClick={e => handleToggleDownloadSession(session.id, session.download_enabled, e)} className="btn btn-secondary" style={{ padding: '6px', color: session.download_enabled === false ? '#f59e0b' : '#fff' }} title={session.download_enabled === false ? "Enable Download" : "Disable Download"}>{session.download_enabled === false ? <Play size={14} color="#f59e0b" /> : <Pause size={14} color="#94a3b8" />}</button>
+                      <button onClick={e => handleToggleSyncSession(session.id, session.sync_enabled, e)} className="btn btn-secondary" style={{ padding: '6px', color: session.sync_enabled === false ? '#ef4444' : '#00d4ff' }} title={session.sync_enabled === false ? "Enable Sync" : "Disable Sync"}><RefreshCw size={14} color={session.sync_enabled === false ? '#ef4444' : '#00d4ff'} /></button>
+                      <button onClick={e => handleSyncChannel(session.id, e)} disabled={syncingSessionId === session.id} className="btn btn-secondary" style={{ padding: '6px' }} title="Sync"><RefreshCw size={14} className={syncingSessionId === session.id ? 'spin' : ''} /></button>
+                      <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-secondary" style={{ padding: '6px' }} title="Open Channel"><ChevronRight size={14} /></button>
+                      <button onClick={e => handlePromptDeleteCard(session, e)} className="btn btn-secondary" style={{ padding: '6px', borderColor: 'rgba(239,68,68,0.4)' }} title="Delete"><Trash2 size={14} color="#ef4444" /></button>
                     </div>
+
                   </div>
                 </div>
               );
