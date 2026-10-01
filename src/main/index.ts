@@ -54,20 +54,13 @@ function saveWindowState(win: BrowserWindow): void {
 }
 
 function getAppIcon(): Electron.NativeImage {
-  const isWin = process.platform === 'win32';
   const candidates = [
-    path.join(__dirname, isWin ? '../public/icon.ico' : '../public/logo.png'),
-    path.join(__dirname, isWin ? '../build/icon.ico' : '../build/icon.png'),
-    path.join(app.getAppPath(), isWin ? 'public/icon.ico' : 'public/logo.png'),
-    path.join(app.getAppPath(), isWin ? 'build/icon.ico' : 'build/icon.png'),
-    path.join(process.cwd(), 'public', isWin ? 'icon.ico' : 'logo.png'),
-    path.join(process.cwd(), 'build', isWin ? 'icon.ico' : 'icon.png'),
-    path.join(__dirname, '../public/logo.png'),
     path.join(__dirname, '../build/icon.png'),
-    path.join(app.getAppPath(), 'public/logo.png'),
+    path.join(__dirname, '../public/logo.png'),
     path.join(app.getAppPath(), 'build/icon.png'),
-    path.join(process.cwd(), 'public', 'logo.png'),
-    path.join(process.cwd(), 'build', 'icon.png')
+    path.join(app.getAppPath(), 'public/logo.png'),
+    path.join(process.cwd(), 'build', 'icon.png'),
+    path.join(process.cwd(), 'public', 'logo.png')
   ];
 
   for (const p of candidates) {

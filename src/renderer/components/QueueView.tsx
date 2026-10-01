@@ -1017,19 +1017,25 @@ export const QueueView: React.FC<QueueViewProps> = ({
     <div style={{ padding: '18px 22px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', gap: '16px' }}>
 
       {/* Global Header Metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px', marginBottom: '8px' }}>
         {[
-          { label: 'TOTAL FILES', icon: <HardDrive size={15} />, value: `${doneItems} / ${totalItems}`, sub: `${sessions.length} channel session${sessions.length !== 1 ? 's' : ''}`, color: '#fff' },
-          { label: 'ACTIVE DOWNLOADS', icon: <Radio size={15} />, value: `${activeItems} downloading`, sub: `${items.filter(i => i.status === 'PAUSED').length} paused · ${items.filter(i => i.status === 'QUEUED').length} queued`, color: activeItems > 0 ? '#00d4ff' : 'var(--text-muted)' },
-          { label: 'TOTAL SPEED', icon: <Zap size={15} />, value: globalSpeed > 0 ? formatSpeed(globalSpeed)! : '—', sub: 'combined across all channels', color: '#00d4ff' },
-          { label: 'QUEUE HEALTH', icon: <CheckCircle2 size={15} />, value: failedItems > 0 ? `${failedItems} failed` : 'Healthy', sub: `${doneItems} completed · deterministic`, color: failedItems > 0 ? '#ef4444' : '#10b981' }
+          { label: 'TOTAL FILES', icon: <HardDrive size={16} color="#a855f7" />, bgAccent: 'rgba(168,85,247,0.15)', borderAccent: '#a855f7', value: `${doneItems} / ${totalItems}`, sub: `${sessions.length} channel session${sessions.length !== 1 ? 's' : ''}`, valueColor: '#fff' },
+          { label: 'ACTIVE DOWNLOADS', icon: <Radio size={16} color="#00d4ff" />, bgAccent: 'rgba(0,212,255,0.15)', borderAccent: '#00d4ff', value: `${activeItems} downloading`, sub: `${items.filter(i => i.status === 'PAUSED').length} paused · ${items.filter(i => i.status === 'QUEUED').length} queued`, valueColor: activeItems > 0 ? '#00d4ff' : '#94a3b8' },
+          { label: 'NETWORK SPEED', icon: <Zap size={16} color="#facc15" />, bgAccent: 'rgba(250,204,21,0.15)', borderAccent: '#facc15', value: globalSpeed > 0 ? formatSpeed(globalSpeed)! : '0 B/s', sub: 'combined across all channels', valueColor: globalSpeed > 0 ? '#facc15' : '#94a3b8' },
+          { label: 'SYSTEM HEALTH', icon: failedItems > 0 ? <AlertTriangle size={16} color="#ef4444" /> : <CheckCircle2 size={16} color="#10b981" />, bgAccent: failedItems > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)', borderAccent: failedItems > 0 ? '#ef4444' : '#10b981', value: failedItems > 0 ? `${failedItems} failed` : 'Healthy', sub: `${doneItems} completed in queue`, valueColor: failedItems > 0 ? '#ef4444' : '#10b981' }
         ].map((c, i) => (
-          <div key={i} className="glass-panel" style={{ padding: '12px 14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.68rem', marginBottom: '5px' }}>
-              <span style={{ letterSpacing: '0.05em', fontWeight: 600 }}>{c.label}</span>{c.icon}
+          <div key={i} className="glass-panel" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px', position: 'relative', overflow: 'hidden', borderRadius: '12px' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '3px', background: `linear-gradient(90deg, ${c.borderAccent}, transparent)` }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: c.bgAccent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {c.icon}
+              </div>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 800, letterSpacing: '0.08em' }}>{c.label}</span>
             </div>
-            <p style={{ fontSize: '1.15rem', fontWeight: 700, color: c.color }}>{c.value}</p>
-            <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', marginTop: '2px' }}>{c.sub}</p>
+            <div>
+              <p style={{ fontSize: '1.25rem', fontWeight: 800, color: c.valueColor, letterSpacing: '-0.02em', margin: '0 0 4px 0' }}>{c.value}</p>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>{c.sub}</p>
+            </div>
           </div>
         ))}
       </div>
@@ -1254,37 +1260,40 @@ export const QueueView: React.FC<QueueViewProps> = ({
                           const canResume = sPaused > 0 || hasFailed;
                           const cardAccent = isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#334155';
 
+                          return (
                             <div
                               key={session.id}
                               style={{
-                                background: 'rgba(255,255,255,0.03)', border: `1px solid ${cardAccent}35`, borderRadius: '6px', padding: '8px 12px',
-                                borderLeft: `3px solid ${cardAccent}`, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer'
+                                background: 'rgba(255,255,255,0.03)', border: `1px solid ${cardAccent}35`, borderRadius: '6px',
+                                borderLeft: `3px solid ${cardAccent}`, display: 'flex', flexDirection: 'column', cursor: 'pointer', overflow: 'hidden'
                               }}
                               onClick={() => handleSelectChannel(session.id)}
                             >
-                              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <h4 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    📂 {session.topic_title || session.title}
-                                  </h4>
-                                  <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '12px', background: isComplete ? 'rgba(16,185,129,0.2)' : isActive ? 'rgba(0,212,255,0.18)' : isPaused ? 'rgba(245,158,11,0.2)' : hasFailed ? 'rgba(239,68,68,0.18)' : 'rgba(100,116,139,0.18)', color: isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#64748b' }}>
-                                    {isComplete ? 'COMPLETED' : isActive ? 'DOWNLOADING' : isPaused ? 'PAUSED' : hasFailed ? 'FAILED' : 'QUEUED'}
-                                  </span>
+                              <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      📂 {session.topic_title || session.title}
+                                    </h4>
+                                    <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: '12px', background: isComplete ? 'rgba(16,185,129,0.2)' : isActive ? 'rgba(0,212,255,0.18)' : isPaused ? 'rgba(245,158,11,0.2)' : hasFailed ? 'rgba(239,68,68,0.18)' : 'rgba(100,116,139,0.18)', color: isComplete ? '#10b981' : isActive ? '#00d4ff' : isPaused ? '#f59e0b' : hasFailed ? '#ef4444' : '#64748b' }}>
+                                      {isComplete ? 'COMPLETED' : isActive ? 'DOWNLOADING' : isPaused ? 'PAUSED' : hasFailed ? 'FAILED' : 'QUEUED'}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                    <span style={{ fontFamily: 'var(--font-mono)' }}>{formatSize(sessionDownloaded)} / {formatSize(sessionTotal)} ({pct}%)</span>
+                                    <span><strong style={{ color: '#10b981' }}>{sDone}</strong>/{sTotal} files</span>
+                                  </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                                  <span style={{ fontFamily: 'var(--font-mono)' }}>{formatSize(sessionDownloaded)} / {formatSize(sessionTotal)} ({pct}%)</span>
-                                  <span><strong style={{ color: '#10b981' }}>{sDone}</strong>/{sTotal} files</span>
-                                </div>
-                                <div style={{ height: '3px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, transition: 'width 0.3s ease' }} />
+
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                                  {canPause && !isComplete && <button onClick={e => handlePauseSession(session.id, e)} className="btn btn-secondary" style={{ padding: '4px', color: '#94a3b8' }} title="Pause"><Pause size={12} /></button>}
+                                  {canResume && !isComplete && <button onClick={e => handleResumeSession(session.id, e)} className="btn btn-primary" style={{ padding: '4px' }} title="Resume"><Play size={12} /></button>}
+                                  <div style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
+                                  <button onClick={e => handlePromptDeleteCard(session, e)} className="btn btn-secondary" style={{ padding: '4px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)' }} title="Remove from Queue"><Trash2 size={12} color="#ef4444" /></button>
                                 </div>
                               </div>
-
-                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
-                                {canPause && !isComplete && <button onClick={e => handlePauseSession(session.id, e)} className="btn btn-secondary" style={{ padding: '4px' }}><Pause size={12} /></button>}
-                                {canResume && !isComplete && <button onClick={e => handleResumeSession(session.id, e)} className="btn btn-primary" style={{ padding: '4px' }}><Play size={12} /></button>}
-                                <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-secondary" style={{ padding: '4px' }}><ChevronRight size={12} /></button>
-                                <button onClick={e => handlePromptDeleteCard(session, e)} className="btn btn-secondary" style={{ padding: '4px', color: '#ef4444' }}><Trash2 size={12} color="#ef4444" /></button>
+                              <div style={{ width: '100%', height: '2px', background: 'rgba(255,255,255,0.03)' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, transition: 'width 0.3s ease' }} />
                               </div>
                             </div>
                           );
@@ -1326,7 +1335,8 @@ export const QueueView: React.FC<QueueViewProps> = ({
                     borderRadius: '8px', overflow: 'hidden', cursor: 'pointer',
                     border: `1px solid rgba(255,255,255,0.05)`, borderLeft: `4px solid ${cardAccent}`,
                     transition: 'all 0.15s ease', boxShadow: isActive ? `0 0 15px ${cardAccent}18` : 'none',
-                    background: isActive ? `rgba(0, 212, 255, 0.03)` : undefined, flexShrink: 0
+                    background: isActive ? `rgba(0, 212, 255, 0.03)` : undefined, flexShrink: 0,
+                    display: 'flex', flexDirection: 'column'
                   }}
                   onClick={() => handleSelectChannel(session.id)}
                 >
@@ -1353,22 +1363,19 @@ export const QueueView: React.FC<QueueViewProps> = ({
                         <span><strong style={{ color: '#10b981' }}>{sDone}</strong>/{sTotal} files</span>
                         {hasFailed && <span><strong style={{ color: '#ef4444' }}>{sFailed}</strong> failed</span>}
                       </div>
-
-                      <div style={{ height: '4px', background: 'rgba(255,255,255,0.07)', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, borderRadius: '4px', transition: 'width 0.4s ease' }} />
-                      </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
-                      {canPause && !isComplete && <button onClick={e => handlePauseSession(session.id, e)} className="btn btn-secondary" style={{ padding: '6px' }} title="Pause"><Pause size={14} /></button>}
+                      {canPause && !isComplete && <button onClick={e => handlePauseSession(session.id, e)} className="btn btn-secondary" style={{ padding: '6px', color: '#94a3b8' }} title="Pause"><Pause size={14} /></button>}
                       {canResume && !isComplete && <button onClick={e => handleResumeSession(session.id, e)} className="btn btn-primary" style={{ padding: '6px' }} title="Resume"><Play size={14} /></button>}
-                      <button onClick={e => handleToggleDownloadSession(session.id, session.download_enabled, e)} className="btn btn-secondary" style={{ padding: '6px', color: session.download_enabled === false ? '#f59e0b' : '#fff' }} title={session.download_enabled === false ? "Enable Download" : "Disable Download"}>{session.download_enabled === false ? <Play size={14} color="#f59e0b" /> : <Pause size={14} color="#94a3b8" />}</button>
-                      <button onClick={e => handleToggleSyncSession(session.id, session.sync_enabled, e)} className="btn btn-secondary" style={{ padding: '6px', color: session.sync_enabled === false ? '#ef4444' : '#00d4ff' }} title={session.sync_enabled === false ? "Enable Sync" : "Disable Sync"}><RefreshCw size={14} color={session.sync_enabled === false ? '#ef4444' : '#00d4ff'} /></button>
-                      <button onClick={e => handleSyncChannel(session.id, e)} disabled={syncingSessionId === session.id} className="btn btn-secondary" style={{ padding: '6px' }} title="Sync"><RefreshCw size={14} className={syncingSessionId === session.id ? 'spin' : ''} /></button>
-                      <button onClick={e => { e.stopPropagation(); handleSelectChannel(session.id); }} className="btn btn-secondary" style={{ padding: '6px' }} title="Open Channel"><ChevronRight size={14} /></button>
-                      <button onClick={e => handlePromptDeleteCard(session, e)} className="btn btn-secondary" style={{ padding: '6px', borderColor: 'rgba(239,68,68,0.4)' }} title="Delete"><Trash2 size={14} color="#ef4444" /></button>
+                      <button onClick={e => handleSyncChannel(session.id, e)} disabled={syncingSessionId === session.id} className="btn btn-secondary" style={{ padding: '6px', color: '#94a3b8' }} title="Force Sync"><RefreshCw size={14} className={syncingSessionId === session.id ? 'spin' : ''} /></button>
+                      <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+                      <button onClick={e => handlePromptDeleteCard(session, e)} className="btn btn-secondary" style={{ padding: '6px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)' }} title="Remove from Queue"><Trash2 size={14} color="#ef4444" /></button>
                     </div>
 
+                  </div>
+                  <div style={{ width: '100%', height: '3px', background: 'rgba(255,255,255,0.03)' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: cardAccent, transition: 'width 0.4s ease' }} />
                   </div>
                 </div>
               );
