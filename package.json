@@ -76,9 +76,9 @@
     },
     "appx": {
       "applicationId": "Teleflow",
-      "identityName": "GeekyKalpesh.Teleflow",
-      "publisher": "CN=Kalpesh Mahajan",
-      "publisherDisplayName": "Kalpesh Mahajan",
+      "identityName": "LoniBurhanpur.Teleflow",
+      "publisher": "CN=726BA665-AF92-49E8-825D-51C24EAB8B00",
+      "publisherDisplayName": "geekykalpesh",
       "displayName": "Teleflow",
       "languages": ["en-US"]
     },
