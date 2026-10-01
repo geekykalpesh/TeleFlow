@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
   openPath: (filePath: string) => ipcRenderer.invoke('shell:open-path', filePath),
   openFolder: (filePath: string) => ipcRenderer.invoke('shell:open-folder', filePath),
+  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
   getDefaultDownloads: () => ipcRenderer.invoke('app:get-default-downloads'),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
 

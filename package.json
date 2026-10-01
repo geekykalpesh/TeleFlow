@@ -27,6 +27,7 @@
     "url": "git+https://github.com/geekykalpesh/TeleFlow.git"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.13",
     "big-integer": "^1.6.52",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
@@ -50,7 +51,7 @@
   },
   "build": {
     "appId": "com.teleflow.app",
-    "productName": "TeleFlow",
+    "productName": "Teleflow",
     "icon": "build/icon.png",
     "npmRebuild": false,
     "directories": {
@@ -69,8 +70,17 @@
     "win": {
       "icon": "build/icon.ico",
       "target": [
-        "nsis"
+        "nsis",
+        "appx"
       ]
+    },
+    "appx": {
+      "applicationId": "Teleflow",
+      "identityName": "GeekyKalpesh.Teleflow",
+      "publisher": "CN=Kalpesh Mahajan",
+      "publisherDisplayName": "Kalpesh Mahajan",
+      "displayName": "Teleflow",
+      "languages": ["en-US"]
     },
     "nsis": {
       "oneClick": false,

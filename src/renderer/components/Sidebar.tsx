@@ -42,27 +42,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div style={{
           width: '36px',
           height: '36px',
-          borderRadius: '10px',
-          background: 'linear-gradient(135deg, #00d4ff 0%, #3b82f6 100%)',
+          borderRadius: '4px',
+          background: 'var(--accent-blue)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#000',
-          boxShadow: 'var(--glow-cyan)'
+          color: '#fff',
+          boxShadow: 'none'
         }}>
           <Download size={20} strokeWidth={2.5} />
         </div>
         <div>
-          <h1 style={{ fontSize: '1.15rem', fontWeight: 700, letterSpacing: '-0.02em', background: 'linear-gradient(to right, #fff, #9ca3af)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          <h1 style={{ fontSize: '1.15rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>
             TeleFlow
           </h1>
           <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Deterministic Downloader</p>
         </div>
       </div>
 
+      {/* Primary CTA (Placed at top for F-Pattern Scanning) */}
+      <button
+        onClick={onOpenNewSession}
+        className="btn btn-primary"
+        style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', marginBottom: '24px' }}
+      >
+        <Download size={16} /> New Download Session
+      </button>
+
       {/* Main Navigation */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '24px' }}>
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: 'auto' }}>
         <button
+          className="nav-btn"
           onClick={() => setActiveTab('queue')}
           style={{
             display: 'flex',
@@ -70,12 +80,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             gap: '10px',
             padding: '10px 12px',
             borderRadius: '8px',
-            background: activeTab === 'queue' ? 'rgba(0, 212, 255, 0.12)' : 'transparent',
-            color: activeTab === 'queue' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-            border: activeTab === 'queue' ? '1px solid rgba(0, 212, 255, 0.3)' : '1px solid transparent',
+            background: activeTab === 'queue' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            color: activeTab === 'queue' ? 'var(--text-main)' : 'var(--text-muted)',
+            border: '1px solid transparent',
             fontWeight: activeTab === 'queue' ? 600 : 400,
             cursor: 'pointer',
-            textAlign: 'left'
+            textAlign: 'left',
+            transition: 'all 0.2s ease'
           }}
         >
           <Layers size={18} />
@@ -83,6 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
+          className="nav-btn"
           onClick={() => setActiveTab('explorer')}
           style={{
             display: 'flex',
@@ -90,12 +102,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             gap: '10px',
             padding: '10px 12px',
             borderRadius: '8px',
-            background: activeTab === 'explorer' ? 'rgba(0, 212, 255, 0.12)' : 'transparent',
-            color: activeTab === 'explorer' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-            border: activeTab === 'explorer' ? '1px solid rgba(0, 212, 255, 0.3)' : '1px solid transparent',
+            background: activeTab === 'explorer' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            color: activeTab === 'explorer' ? 'var(--text-main)' : 'var(--text-muted)',
+            border: '1px solid transparent',
             fontWeight: activeTab === 'explorer' ? 600 : 400,
             cursor: 'pointer',
-            textAlign: 'left'
+            textAlign: 'left',
+            transition: 'all 0.2s ease'
           }}
         >
           <Search size={18} />
@@ -103,6 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
+          className="nav-btn"
           onClick={() => setActiveTab('sessions')}
           style={{
             display: 'flex',
@@ -110,12 +124,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             gap: '10px',
             padding: '10px 12px',
             borderRadius: '8px',
-            background: activeTab === 'sessions' ? 'rgba(0, 212, 255, 0.12)' : 'transparent',
-            color: activeTab === 'sessions' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-            border: activeTab === 'sessions' ? '1px solid rgba(0, 212, 255, 0.3)' : '1px solid transparent',
+            background: activeTab === 'sessions' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            color: activeTab === 'sessions' ? 'var(--text-main)' : 'var(--text-muted)',
+            border: '1px solid transparent',
             fontWeight: activeTab === 'sessions' ? 600 : 400,
             cursor: 'pointer',
-            textAlign: 'left'
+            textAlign: 'left',
+            transition: 'all 0.2s ease'
           }}
         >
           <FolderCheck size={18} />
@@ -126,6 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
+          className="nav-btn"
           onClick={() => setActiveTab('renumber')}
           style={{
             display: 'flex',
@@ -133,12 +149,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             gap: '10px',
             padding: '10px 12px',
             borderRadius: '8px',
-            background: activeTab === 'renumber' ? 'rgba(0, 212, 255, 0.12)' : 'transparent',
-            color: activeTab === 'renumber' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-            border: activeTab === 'renumber' ? '1px solid rgba(0, 212, 255, 0.3)' : '1px solid transparent',
+            background: activeTab === 'renumber' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            color: activeTab === 'renumber' ? 'var(--text-main)' : 'var(--text-muted)',
+            border: '1px solid transparent',
             fontWeight: activeTab === 'renumber' ? 600 : 400,
             cursor: 'pointer',
-            textAlign: 'left'
+            textAlign: 'left',
+            transition: 'all 0.2s ease'
           }}
         >
           <RefreshCw size={18} />
@@ -146,6 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
+          className="nav-btn"
           onClick={() => setActiveTab('settings')}
           style={{
             display: 'flex',
@@ -153,12 +171,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             gap: '10px',
             padding: '10px 12px',
             borderRadius: '8px',
-            background: activeTab === 'settings' ? 'rgba(0, 212, 255, 0.12)' : 'transparent',
-            color: activeTab === 'settings' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-            border: activeTab === 'settings' ? '1px solid rgba(0, 212, 255, 0.3)' : '1px solid transparent',
+            background: activeTab === 'settings' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            color: activeTab === 'settings' ? 'var(--text-main)' : 'var(--text-muted)',
+            border: '1px solid transparent',
             fontWeight: activeTab === 'settings' ? 600 : 400,
             cursor: 'pointer',
-            textAlign: 'left'
+            textAlign: 'left',
+            transition: 'all 0.2s ease'
           }}
         >
           <Settings size={18} />
@@ -166,19 +185,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </nav>
 
-      {/* Control Action */}
-      <button
-        onClick={onOpenNewSession}
-        className="btn btn-primary"
-        style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', marginBottom: '12px' }}
-      >
-        + New Download Session
-      </button>
-
+      {/* Global Queue Control */}
       <button
         onClick={onToggleQueue}
         className={`btn ${isQueueRunning ? 'btn-secondary' : 'btn-primary'}`}
-        style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', marginBottom: 'auto' }}
+        style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', marginBottom: '16px' }}
       >
         {isQueueRunning ? <><Pause size={16} /> Pause Queue</> : <><Play size={16} /> Start Queue</>}
       </button>
@@ -229,6 +240,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           {authStatus.isAuthenticated ? 'Edit' : 'Login'}
         </button>
+      </div>
+
+      {/* Credits Footer */}
+      <div style={{
+        marginTop: '16px',
+        paddingTop: '16px',
+        borderTop: '1px solid var(--border-color)',
+        textAlign: 'center'
+      }}>
+        <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+          Made with <span style={{ color: 'var(--accent-red)' }}>♥</span> by <strong style={{ color: 'var(--text-main)' }}>Kalpesh Mahajan</strong>
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', fontSize: '0.65rem' }}>
+          <a href="#" onClick={(e) => { e.preventDefault(); (window as any).electronAPI.openExternal('https://geekykalpesh.com'); }} style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>geekykalpesh.com</a>
+          <span style={{ color: 'var(--text-dim)' }}>|</span>
+          <a href="#" onClick={(e) => { e.preventDefault(); (window as any).electronAPI.openExternal('mailto:geekykalpesh@gmail.com'); }} style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>geekykalpesh@gmail.com</a>
+        </div>
       </div>
     </aside>
   );

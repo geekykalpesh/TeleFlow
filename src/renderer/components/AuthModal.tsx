@@ -45,6 +45,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
     }
   }, [authStatus]);
 
+  // Power-User UX: Close modal on Escape key
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(authStatus.error || null);
   const [showPortal, setShowPortal] = useState(false);
@@ -71,7 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
     setError(null);
     try {
       const api = getApi();
-      await api.configureCredentials(parseInt(apiId, 10), apiHash, 'krishnaldrbot', 'krishnaebot', 'production');
+      await api.configureCredentials(parseInt(apiId, 10), apiHash, 'TeleFlowApp', 'teleflow', 'production');
       const status = await api.sendAuthCode(phoneNumber.trim());
       if (status && status.step) {
         setCurrentStep(status.step);
@@ -159,8 +168,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
   };
 
   return (
-    <div className="modal-overlay" style={{ background: 'rgba(9, 12, 21, 0.85)', backdropFilter: 'blur(12px)' }}>
-      <div style={{
+    <div className="modal-overlay" onClick={onClose} style={{ background: 'rgba(9, 12, 21, 0.85)', backdropFilter: 'blur(12px)' }}>
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        style={{
         width: '100%',
         maxWidth: '460px',
         position: 'relative',
@@ -292,33 +303,65 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
                   </h3>
                 </div>
 
-                {/* Subtext with link */}
-                <p style={{ fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.45 }}>
-                  Go to <a href="https://my.telegram.org" target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>my.telegram.org</a>, sign in with your phone, go to <strong>API development tools</strong>, create an application and copy the data here.
-                </p>
+                {/* Crystal Clear Instructions with Micro-interactions */}
+                <div style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                }}>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600, marginBottom: '4px' }}>
+                    How to get your API Keys:
+                  </p>
+                  
+                  <div className="instruction-step" style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', transition: 'transform 0.2s ease' }}>
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>1</div>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      Log into <strong style={{ color: 'var(--text-main)' }}>my.telegram.org</strong> (Official Telegram Site).
+                    </p>
+                  </div>
+                  
+                  <div className="instruction-step" style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', transition: 'transform 0.2s ease' }}>
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>2</div>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      Click on <strong style={{ color: 'var(--text-main)' }}>API development tools</strong>.
+                    </p>
+                  </div>
+                  
+                  <div className="instruction-step" style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', transition: 'transform 0.2s ease' }}>
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>3</div>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      Create an application. Copy the <strong>api_id</strong> and <strong>api_hash</strong> below.
+                    </p>
+                  </div>
 
-                {/* Not sure how Button */}
-                <button
-                  type="button"
-                  onClick={() => setShowPortal(true)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 14px',
-                    borderRadius: '8px',
-                    background: 'transparent',
-                    border: '1px solid #0088cc',
-                    color: '#38bdf8',
-                    fontSize: '0.82rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <HelpCircle size={15} /> Not sure how? We explain it step by step
-                </button>
+                  {/* Built-in Portal Button with Hover micro-interaction */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPortal(true)}
+                    className="btn btn-secondary"
+                    style={{
+                      width: '100%',
+                      marginTop: '8px',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      color: 'var(--accent-blue)',
+                      border: '1px solid rgba(59, 130, 246, 0.3)'
+                    }}
+                  >
+                    <HelpCircle size={15} /> Open Guided Setup Portal
+                  </button>
+                </div>
 
                 {/* API ID Input */}
                 <div>
@@ -333,11 +376,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
                     required
                     style={{
                       width: '100%',
-                      background: '#0f172a',
-                      border: '1px solid #334155',
+                      background: 'var(--input-bg)',
+                      border: '1px solid var(--border-color)',
                       borderRadius: '8px',
                       padding: '10px 14px',
-                      color: '#fff',
+                      color: 'var(--text-main)',
                       fontSize: '0.9rem',
                       fontFamily: 'var(--font-mono)',
                       outline: 'none'
@@ -358,11 +401,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
                     required
                     style={{
                       width: '100%',
-                      background: '#0f172a',
-                      border: '1px solid #334155',
+                      background: 'var(--input-bg)',
+                      border: '1px solid var(--border-color)',
                       borderRadius: '8px',
                       padding: '10px 14px',
-                      color: '#fff',
+                      color: 'var(--text-main)',
                       fontSize: '0.9rem',
                       fontFamily: 'var(--font-mono)',
                       outline: 'none'
@@ -383,11 +426,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authStatus, onClose, onRef
                     required
                     style={{
                       width: '100%',
-                      background: '#0f172a',
-                      border: '1px solid #334155',
+                      background: 'var(--input-bg)',
+                      border: '1px solid var(--border-color)',
                       borderRadius: '8px',
                       padding: '10px 14px',
-                      color: '#fff',
+                      color: 'var(--text-main)',
                       fontSize: '0.9rem',
                       fontFamily: 'var(--font-mono)',
                       outline: 'none'

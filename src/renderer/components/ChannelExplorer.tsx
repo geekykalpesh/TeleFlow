@@ -5,6 +5,7 @@ import {
   FileText, Video, Music, Image as ImageIcon, FolderPlus, Settings2,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader, AlertTriangle, Download, Link
 } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 import { parseTelegramLink } from '../../main/utils/telegramLink';
 
@@ -62,7 +63,13 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
     return api;
   };
 
-  useEffect(() => { handleSearch(''); }, []);
+  // Real-time Debounced Search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleSearch(searchQuery);
+    }, 300); // 300ms debounce
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const handleSearch = async (query: string) => {
     setLoading(true);
@@ -220,16 +227,16 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
     } catch (err: any) { console.error('Folder selection failed:', err); }
   };
 
-  // Visible messages on the current page
-  const visibleMessages = (() => {
-    let src = allMessages;
-    if (typeFilter.length > 0) src = src.filter(m => typeFilter.includes(m.media_type));
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return src.slice(start, start + PAGE_SIZE);
-  })();
-
+  // Virtualization replaces pagination!
   const filteredAll = typeFilter.length > 0 ? allMessages.filter(m => typeFilter.includes(m.media_type)) : allMessages;
-  const filteredTotalPages = Math.max(1, Math.ceil(filteredAll.length / PAGE_SIZE));
+  
+  const parentRef = React.useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filteredAll.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 40,
+    overscan: 10,
+  });
 
   const toggleSelectMessage = (msgId: number) => {
     setSelectedMsgIds(prev => {
@@ -240,22 +247,13 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
     });
   };
 
-  const toggleSelectPage = () => {
-    const pageIds = visibleMessages.map(m => m.message_id);
-    const allSelected = pageIds.every(id => selectedMsgIds.has(id));
-    setSelectedMsgIds(prev => {
-      const next = new Set(prev);
-      if (allSelected) pageIds.forEach(id => next.delete(id));
-      else pageIds.forEach(id => next.add(id));
-      return next;
-    });
-  };
-
   const selectAll = () => {
     setSelectedMsgIds(new Set(allMessages.map(m => m.message_id)));
   };
 
-  const deselectAll = () => setSelectedMsgIds(new Set());
+  const deselectAll = () => {
+    setSelectedMsgIds(new Set());
+  };
 
   const toggleTypeFilter = (t: MediaType) => {
     setTypeFilter(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
@@ -358,7 +356,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
     }
   };
 
-  const pageAllSelected = visibleMessages.length > 0 && visibleMessages.every(m => selectedMsgIds.has(m.message_id));
+
 
   return (
     <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', gap: '14px' }}>
@@ -417,13 +415,20 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
           {/* Search Bar */}
           <div style={{ display: 'flex', gap: '10px' }}>
             <div style={{ position: 'relative', flex: 1 }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-              <input type="text" placeholder="Search groups or channels by name or @username..." className="input-field" style={{ paddingLeft: '38px' }}
-                value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch(searchQuery)} />
+              {loading ? (
+                <Loader size={16} className="spin" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-blue)' }} />
+              ) : (
+                <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+              )}
+              <input 
+                type="text" 
+                placeholder="Search groups or channels by name or @username..." 
+                className="input-field" 
+                style={{ paddingLeft: '42px', fontSize: '0.95rem' }}
+                value={searchQuery} 
+                onChange={e => setSearchQuery(e.target.value)} 
+              />
             </div>
-            <button onClick={() => handleSearch(searchQuery)} className="btn btn-primary" disabled={loading} style={{ minWidth: '90px' }}>
-              {loading ? <><Loader size={14} className="spin" /> Searching...</> : <><Search size={14} /> Search</>}
-            </button>
           </div>
 
           {/* Chat List */}
@@ -435,27 +440,50 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                 <p style={{ fontSize: '0.78rem', marginTop: '4px', opacity: 0.7 }}>Type a name above and hit Enter, or use @username</p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px,1fr))', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {chats.map((chat) => (
-                  <div key={chat.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '14px 16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: 'rgba(0,212,255,0.12)', color: '#00d4ff', textTransform: 'uppercase' }}>
-                          {chat.type}
-                        </span>
-                        {chat.isForum && (
-                          <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', background: 'rgba(168,85,247,0.18)', color: '#c084fc', textTransform: 'uppercase' }}>
-                            FORUM
-                          </span>
-                        )}
-                        {chat.username && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '4px' }}>@{chat.username}</span>}
-                      </div>
-                      {chat.participantsCount ? <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{chat.participantsCount.toLocaleString()} members</span> : null}
+                  <div 
+                    key={chat.id} 
+                    className="list-row" 
+                    onClick={() => handleGoInsideGroup(chat)}
+                    style={{ 
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+                      background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', 
+                      padding: '12px 20px', borderRadius: '8px', cursor: 'pointer' 
+                    }}
+                  >
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flex: 1 }}>
+                        {/* 1. Visual Anchor (Left Side) */}
+                        <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <FolderOpen size={20} />
+                        </div>
+
+                        {/* 2. Primary Information (F-Pattern) */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                           <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>{chat.title}</h3>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                               {chat.type}
+                             </span>
+                             {chat.isForum && (
+                               <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(168,85,247,0.1)', color: 'var(--accent-purple)', textTransform: 'uppercase' }}>
+                                 FORUM
+                               </span>
+                             )}
+                             {chat.username && <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>@{chat.username}</span>}
+                           </div>
+                        </div>
                     </div>
-                    <h3 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '10px' }}>{chat.title}</h3>
-                    <button onClick={() => handleGoInsideGroup(chat)} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '7px', fontSize: '0.8rem' }}>
-                      <FolderOpen size={14} /> Open & Browse Media
-                    </button>
+
+                    {/* 3. Secondary Info & Interaction Hint */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                        {chat.participantsCount ? <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'right' }}>{chat.participantsCount.toLocaleString()} members</span> : null}
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <ChevronRight size={16} color="var(--text-muted)" />
+                        </div>
+                    </div>
+
                   </div>
                 ))}
               </div>
@@ -545,13 +573,9 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
             </button>
           </div>
 
-          {/* ── Selection controls + pagination ── */}
+          {/* ── Selection controls ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             {/* Select controls */}
-            <button onClick={toggleSelectPage} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
-              {pageAllSelected ? <CheckSquare size={13} /> : <Square size={13} />}
-              {pageAllSelected ? 'Deselect Page' : 'Select Page'}
-            </button>
             <button onClick={selectAll} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem', color: '#00d4ff' }}>
               <CheckSquare size={13} /> Select All Loaded ({allMessages.length})
             </button>
@@ -563,100 +587,81 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
               {selectedMsgIds.size} selected · {formatSize(totalSelectedSize)}
             </span>
 
-            {/* Pagination */}
+            {/* API Loading Status */}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {hasMore && (
                 <button onClick={handleLoadMore} disabled={loadingMore} className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '0.75rem', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
-                  {loadingMore ? <><Loader size={12} /> Loading...</> : `⬇ Load More (next ${PAGE_SIZE})`}
+                  {loadingMore ? <><Loader size={12} /> Loading...</> : `⬇ Fetch More from Telegram`}
                 </button>
               )}
               {!hasMore && allMessages.length > 0 && (
-                <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700 }}>✓ All messages loaded</span>
-              )}
-              {filteredTotalPages > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                    style={{ background: 'rgba(255,255,255,0.07)', border: 'none', color: 'var(--text-muted)', borderRadius: '5px', padding: '3px 7px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}>
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-main)', minWidth: '80px', textAlign: 'center' }}>
-                    Page {currentPage} / {filteredTotalPages}
-                  </span>
-                  <button onClick={() => setCurrentPage(p => Math.min(filteredTotalPages, p + 1))} disabled={currentPage === filteredTotalPages}
-                    style={{ background: 'rgba(255,255,255,0.07)', border: 'none', color: 'var(--text-muted)', borderRadius: '5px', padding: '3px 7px', cursor: currentPage === filteredTotalPages ? 'not-allowed' : 'pointer', opacity: currentPage === filteredTotalPages ? 0.4 : 1 }}>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
+                <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700 }}>✓ Entire history loaded</span>
               )}
             </div>
           </div>
 
-          {/* ── Media Table ── */}
-          <div className="glass-panel" style={{ flex: 1, overflowY: 'auto', borderRadius: '12px' }}>
+          <div className="glass-panel" ref={parentRef} style={{ flex: 1, overflowY: 'auto', borderRadius: '12px', position: 'relative' }}>
             {loading ? (
               <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <Loader size={32} style={{ opacity: 0.5, marginBottom: '12px' }} />
                 <p style={{ fontWeight: 600 }}>Loading media from <strong>{selectedChat.title}</strong>...</p>
-                <p style={{ fontSize: '0.8rem', marginTop: '4px', opacity: 0.7 }}>Fetching first {PAGE_SIZE} messages</p>
               </div>
-            ) : visibleMessages.length === 0 ? (
+            ) : filteredAll.length === 0 ? (
               <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <p style={{ fontWeight: 600 }}>No media found on this page.</p>
+                <p style={{ fontWeight: 600 }}>No media found.</p>
                 <p style={{ fontSize: '0.8rem', marginTop: '4px', opacity: 0.7 }}>
-                  {hasMore ? 'Click "Load More" to fetch older messages.' : 'Try changing the type filter.'}
+                  {hasMore ? 'Click "Fetch More" to load older messages.' : 'Try changing the type filter.'}
                 </p>
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.81rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.25)', position: 'sticky', top: 0, zIndex: 1 }}>
-                    {[
-                      { label: '', w: '44px' },
-                      { label: 'MSG ID', w: '90px' },
-                      { label: 'FILENAME', w: undefined },
-                      { label: 'TYPE', w: '80px' },
-                      { label: 'SIZE', w: '90px' },
-                      { label: 'SENDER', w: '120px' },
-                      { label: 'DATE', w: '90px' },
-                    ].map((col, i) => (
-                      <th key={i} style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.7rem', width: col.w }}>
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleMessages.map((msg) => {
+              <div style={{ minWidth: '800px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '44px 90px 1fr 80px 90px 120px 90px', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.25)', position: 'sticky', top: 0, zIndex: 1, padding: '9px 0', fontWeight: 600, fontSize: '0.7rem', letterSpacing: '0.04em' }}>
+                  <div style={{ padding: '0 12px' }}></div>
+                  <div style={{ padding: '0 12px' }}>MSG ID</div>
+                  <div style={{ padding: '0 12px' }}>FILENAME</div>
+                  <div style={{ padding: '0 12px' }}>TYPE</div>
+                  <div style={{ padding: '0 12px' }}>SIZE</div>
+                  <div style={{ padding: '0 12px' }}>SENDER</div>
+                  <div style={{ padding: '0 12px' }}>DATE</div>
+                </div>
+                
+                <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const msg = filteredAll[virtualRow.index];
                     const isSelected = selectedMsgIds.has(msg.message_id);
                     return (
-                      <tr key={msg.message_id} onClick={() => toggleSelectMessage(msg.message_id)}
-                        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', background: isSelected ? 'rgba(0,212,255,0.05)' : 'transparent', transition: 'background 0.12s' }}>
-                        <td style={{ padding: '9px 12px' }}>
-                          {isSelected
-                            ? <CheckSquare size={15} color="#00d4ff" />
-                            : <Square size={15} color="rgba(255,255,255,0.2)" />}
-                        </td>
-                        <td style={{ padding: '9px 12px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#00d4ff', fontSize: '0.75rem' }}>
+                      <div
+                        key={virtualRow.key}
+                        onClick={() => toggleSelectMessage(msg.message_id)}
+                        style={{
+                          position: 'absolute', top: 0, left: 0, width: '100%', height: `${virtualRow.size}px`, transform: `translateY(${virtualRow.start}px)`,
+                          display: 'grid', gridTemplateColumns: '44px 90px 1fr 80px 90px 120px 90px',
+                          alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer',
+                          background: isSelected ? 'rgba(0,212,255,0.05)' : 'transparent', transition: 'background 0.12s'
+                        }}
+                      >
+                        <div style={{ padding: '0 12px' }}>
+                          {isSelected ? <CheckSquare size={15} color="#00d4ff" /> : <Square size={15} color="rgba(255,255,255,0.2)" />}
+                        </div>
+                        <div style={{ padding: '0 12px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#00d4ff', fontSize: '0.75rem' }}>
                           #{msg.message_id}
-                        </td>
-                        <td style={{ padding: '9px 12px', fontWeight: 600, maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        </div>
+                        <div style={{ padding: '0 12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {msg.filename}
                           {msg.text && <span style={{ marginLeft: '6px', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>{msg.text.slice(0, 40)}</span>}
-                        </td>
-                        <td style={{ padding: '9px 12px' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <TypeIcon type={msg.media_type} />
-                            <span style={{ fontSize: '0.7rem', textTransform: 'capitalize', color: 'var(--text-muted)' }}>{msg.media_type}</span>
-                          </span>
-                        </td>
-                        <td style={{ padding: '9px 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{formatSize(msg.size)}</td>
-                        <td style={{ padding: '9px 12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>{msg.sender_name}</td>
-                        <td style={{ padding: '9px 12px', fontSize: '0.73rem', color: 'var(--text-muted)' }}>{msg.date}</td>
-                      </tr>
+                        </div>
+                        <div style={{ padding: '0 12px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <TypeIcon type={msg.media_type} />
+                          <span style={{ fontSize: '0.7rem', textTransform: 'capitalize', color: 'var(--text-muted)' }}>{msg.media_type}</span>
+                        </div>
+                        <div style={{ padding: '0 12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{formatSize(msg.size)}</div>
+                        <div style={{ padding: '0 12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>{msg.sender_name}</div>
+                        <div style={{ padding: '0 12px', fontSize: '0.73rem', color: 'var(--text-muted)' }}>{msg.date}</div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
+                </div>
+              </div>
             )}
           </div>
 

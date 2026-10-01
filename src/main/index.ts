@@ -206,6 +206,8 @@ async function createWindow() {
 }
 
 // App lifecycle
+app.setAppUserModelId('com.teleflow.app'); // Ensures Windows Taskbar & Start Menu correctly binds the icon
+
 app.whenReady().then(async () => {
   try {
     await dbService.init();
@@ -375,6 +377,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('shell:open-path', async (_, filePath) => {
     if (filePath) await shell.openPath(filePath);
+  });
+  
+  ipcMain.handle('shell:open-external', async (_, url) => {
+    if (url) await shell.openExternal(url);
   });
 
   ipcMain.handle('shell:open-folder', async (_, folderPath) => {

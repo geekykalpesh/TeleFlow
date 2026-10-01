@@ -583,8 +583,20 @@ export class ScannerService {
     const ext = path.extname(name);
     const hasValidExt = /^\.[a-zA-Z0-9]{1,8}$/.test(ext);
     const base = hasValidExt ? name.slice(0, name.length - ext.length) : name;
-    const cleanBase = base.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim().replace(/\.+$/, '');
-    const truncatedBase = cleanBase.substring(0, 80).trim().replace(/\.+$/, '');
+    
+    // 1. Strip path traversal and illegal characters
+    let cleanBase = base.replace(/[\\/:*?"<>|\r\n\t»«|]/g, '_').trim();
+    
+    // 2. Strip ALL dots to prevent '..' traversal edge cases
+    cleanBase = cleanBase.replace(/\.+/g, '_');
+    
+    // 3. Block Windows reserved names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+    const reservedNames = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+    if (reservedNames.test(cleanBase)) {
+      cleanBase = `_${cleanBase}_`;
+    }
+
+    const truncatedBase = cleanBase.substring(0, 80).trim() || 'unnamed_file';
     return `${truncatedBase}${hasValidExt ? ext : ''}`;
   }
 

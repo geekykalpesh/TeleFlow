@@ -1,29 +1,33 @@
 :root {
-  --bg-dark: #090c15;
-  --bg-card: rgba(18, 24, 38, 0.7);
-  --bg-card-hover: rgba(28, 36, 56, 0.8);
-  --bg-sidebar: #06080f;
+  --bg-dark: #09090B;
+  --bg-card: #18181B;
+  --bg-card-hover: #27272A;
+  --bg-sidebar: #09090B;
   --border-color: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(0, 212, 255, 0.5);
+  --border-focus: rgba(59, 130, 246, 0.5);
 
-  --accent-cyan: #00d4ff;
+  --accent-cyan: #38bdf8;
   --accent-blue: #3b82f6;
   --accent-purple: #8b5cf6;
   --accent-green: #10b981;
   --accent-amber: #f59e0b;
   --accent-red: #ef4444;
 
-  --text-main: #f3f4f6;
-  --text-muted: #9ca3af;
-  --text-dim: #6b7280;
+  --text-main: #FAFAFA;
+  --text-muted: #A1A1AA;
+  --text-dim: #71717A;
 
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --glass-bg: rgba(15, 21, 37, 0.75);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  --glow-cyan: 0 0 20px rgba(0, 212, 255, 0.2);
+  --glass-bg: rgba(24, 24, 27, 0.6);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --glow-cyan: none;
+
+  --btn-primary-text: #FFFFFF;
+  --input-bg: #18181B;
+  --header-bg: rgba(9, 9, 11, 0.8);
 }
 
 * {
@@ -57,14 +61,13 @@ body {
   background: rgba(0, 212, 255, 0.4);
 }
 
-/* Glassmorphism Card */
+/* Modern Glass/Card */
 .glass-panel {
   background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
   border: var(--glass-border);
   box-shadow: var(--glass-shadow);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 /* App Layout */
@@ -72,8 +75,7 @@ body {
   display: flex;
   height: 100vh;
   width: 100vw;
-  background: radial-gradient(circle at 10% 20%, rgba(0, 212, 255, 0.05) 0%, transparent 40%),
-              radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
+  background: var(--bg-dark);
 }
 
 .main-content {
@@ -92,7 +94,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: rgba(9, 12, 21, 0.8);
+  background: var(--header-bg);
   backdrop-filter: blur(12px);
 }
 
@@ -106,25 +108,29 @@ body {
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid transparent;
+}
+.btn:active {
+  transform: scale(0.97);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #00d4ff 0%, #3b82f6 100%);
-  color: #000;
-  font-weight: 600;
-  box-shadow: var(--glow-cyan);
+  background: var(--accent-blue);
+  color: #fff;
+  font-weight: 500;
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 .btn-primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
+  background: #2563EB; /* Slightly darker hover */
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .btn-secondary {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-main);
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.1);
@@ -138,6 +144,22 @@ body {
 }
 .btn-danger:hover {
   background: rgba(239, 68, 68, 0.25);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Premium List Row Interactions */
+.list-row {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.list-row:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
 /* Badges */
@@ -198,19 +220,21 @@ body {
 /* Inputs */
 .input-field {
   width: 100%;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   padding: 10px 14px;
   border-radius: 8px;
   color: var(--text-main);
   font-size: 0.9rem;
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .input-field:focus {
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
+  border-color: var(--accent-blue);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  transform: translateY(-1px);
 }
 
 @keyframes fadeIn {
@@ -230,7 +254,5 @@ body {
 }
 
 .progress-shimmer {
-  background: linear-gradient(90deg, #00d4ff 0%, #8b5cf6 50%, #00d4ff 100%) !important;
-  background-size: 200% 100% !important;
-  animation: shimmer 2s infinite linear !important;
+  background: var(--accent-blue) !important;
 }

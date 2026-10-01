@@ -9,8 +9,8 @@ interface MyTelegramPortalProps {
 export const MyTelegramPortal: React.FC<MyTelegramPortalProps> = ({ onClose, onApplyCredentials }) => {
   const [extractedApiId, setExtractedApiId] = useState('');
   const [extractedApiHash, setExtractedApiHash] = useState('');
-  const [appTitle, setAppTitle] = useState('krishnaldrbot');
-  const [shortName, setShortName] = useState('krishnaebot');
+  const [appTitle, setAppTitle] = useState('TeleFlowApp');
+  const [shortName, setShortName] = useState('teleflow');
   const [applied, setApplied] = useState(false);
 
   const handleOpenExternal = () => {
@@ -72,16 +72,25 @@ export const MyTelegramPortal: React.FC<MyTelegramPortalProps> = ({ onClose, onA
             </div>
 
             {/* Step Guides */}
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <p style={{ display: 'flex', gap: '6px' }}>
-                <strong style={{ color: 'var(--accent-cyan)' }}>1.</strong> Log in with phone & confirmation code.
-              </p>
-              <p style={{ display: 'flex', gap: '6px' }}>
-                <strong style={{ color: 'var(--accent-cyan)' }}>2.</strong> Click <strong>API development tools</strong>.
-              </p>
-              <p style={{ display: 'flex', gap: '6px' }}>
-                <strong style={{ color: 'var(--accent-cyan)' }}>3.</strong> Create app & copy your keys below.
-              </p>
+            <div style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>1</div>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+                  Log in on the left side with your phone.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>2</div>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+                  Click on <strong style={{ color: 'var(--text-main)' }}>API development tools</strong>.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>3</div>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+                  Create an application and copy your keys below.
+                </p>
+              </div>
             </div>
 
             {/* Inputs */}
@@ -112,7 +121,7 @@ export const MyTelegramPortal: React.FC<MyTelegramPortalProps> = ({ onClose, onA
                 <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>App Title</label>
                 <input
                   type="text"
-                  placeholder="krishnaldrbot"
+                  placeholder="TeleFlowApp"
                   className="input-field"
                   value={appTitle}
                   onChange={(e) => setAppTitle(e.target.value)}
@@ -123,7 +132,7 @@ export const MyTelegramPortal: React.FC<MyTelegramPortalProps> = ({ onClose, onA
                 <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Short Name</label>
                 <input
                   type="text"
-                  placeholder="krishnaebot"
+                  placeholder="teleflow"
                   className="input-field"
                   value={shortName}
                   onChange={(e) => setShortName(e.target.value)}

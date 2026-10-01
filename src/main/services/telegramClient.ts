@@ -329,40 +329,46 @@ class TelegramClientService {
       }
     }
 
-    // 3. Fallback: query Telegram contacts search
+    // 3. Filter local dialogs by title or username or ID first
+    const filterTerm = cleanQuery.toLowerCase();
+    const localMatches = dialogs.filter((d) =>
+      d.title.toLowerCase().includes(filterTerm) ||
+      (d.username && d.username.toLowerCase().includes(filterTerm)) ||
+      d.id.includes(filterTerm)
+    );
+
+    // 4. Fallback/append: query Telegram contacts search for global results
+    let globalChats: TelegramChat[] = [];
     try {
       const result = await this.client.invoke(new Api.contacts.Search({ q: cleanQuery, limit: 20 }));
-      const chats: TelegramChat[] = [];
       if (result.chats) {
         for (const c of result.chats) {
           const chatEntity = c as any;
           let type: 'channel' | 'group' | 'user' | 'chat' = 'group';
           if (chatEntity.broadcast) type = 'channel';
           else if (chatEntity.megagroup) type = 'group';
-          chats.push({
-            id: chatEntity.id ? (chatEntity.id.toString().startsWith('-100') ? chatEntity.id.toString() : `-100${chatEntity.id}`) : '0',
-            title: chatEntity.title || 'Unnamed Group',
-            username: chatEntity.username || '',
-            type,
-            isForum: !!chatEntity.forum,
-            unreadCount: 0,
-            hasMedia: true,
-            participantsCount: chatEntity.participantsCount || 0
-          });
+          const chatIdStr = chatEntity.id ? (chatEntity.id.toString().startsWith('-100') ? chatEntity.id.toString() : `-100${chatEntity.id}`) : '0';
+          
+          // Avoid duplicates if already found in local dialogs
+          if (!localMatches.some(m => m.id === chatIdStr)) {
+            globalChats.push({
+              id: chatIdStr,
+              title: chatEntity.title || 'Unnamed Group',
+              username: chatEntity.username || '',
+              type,
+              isForum: !!chatEntity.forum,
+              unreadCount: 0,
+              hasMedia: true,
+              participantsCount: chatEntity.participantsCount || 0
+            });
+          }
         }
       }
-      if (chats.length > 0) return chats;
     } catch (err) {
-      console.warn('Search contacts failed, falling back to local dialog search:', err);
+      console.warn('Search contacts failed:', err);
     }
 
-    // 4. Fallback: filter local dialogs by title or username or ID
-    const filterTerm = cleanQuery.toLowerCase();
-    return dialogs.filter((d) =>
-      d.title.toLowerCase().includes(filterTerm) ||
-      (d.username && d.username.toLowerCase().includes(filterTerm)) ||
-      d.id.includes(filterTerm)
-    );
+    return [...localMatches, ...globalChats];
   }
 
   public async getForumTopics(chatId: string): Promise<TelegramForumTopic[]> {
