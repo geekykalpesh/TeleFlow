@@ -2,7 +2,6 @@ import { TelegramClient, Api, sessions } from 'telegram';
 const StringSession = sessions.StringSession;
 import bigInt from 'big-integer';
 import { dbService } from './dbService';
-import { downloadManager } from './downloadManager';
 import { TelegramAuthStatus, TelegramChat, TelegramUser, GroupMessageItem, MediaType, TelegramForumTopic } from '../../types';
 import { parseTelegramLink } from '../utils/telegramLink';
 import path from 'path';
@@ -645,7 +644,8 @@ class TelegramClientService {
     targetTempPath: string,
     onProgress: (downloadedBytes: number, totalBytes: number) => void,
     itemId?: string,
-    startOffset: number = 0
+    startOffset: number = 0,
+    maxSpeedBps: number = 0
   ): Promise<void> {
     if (!this.client) throw new Error('Telegram client is not connected.');
 
@@ -681,7 +681,8 @@ class TelegramClientService {
       16,
       entity,
       messageId,
-      itemId
+      itemId,
+      maxSpeedBps
     );
   }
 
@@ -694,7 +695,8 @@ class TelegramClientService {
     concurrencyWorkers: number = 8,
     entity?: any,
     messageId?: number,
-    itemId?: string
+    itemId?: string,
+    maxSpeedBps: number = 0
   ): Promise<void> {
     if (!this.client) throw new Error('Telegram client is not connected.');
     if (!message || !message.media) throw new Error('Message does not contain media.');
@@ -763,7 +765,6 @@ class TelegramClientService {
             }
 
             // Speed limit throttling check
-            const maxSpeedBps = downloadManager.getSpeedLimit();
             if (maxSpeedBps > 0 && chunk.length > 0) {
               const delayMs = (chunk.length / maxSpeedBps) * 1000;
               if (delayMs > 5) {

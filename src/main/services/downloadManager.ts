@@ -381,7 +381,8 @@ export class DownloadManager {
             this.notifyProgress(item.id, 'DOWNLOADING', downloadedBytes, totalBytes || item.total_bytes, speedBps);
           },
           item.id,
-          startOffset
+          startOffset,
+          this.getSpeedLimit()
         );
 
         // Download phase finished cleanly

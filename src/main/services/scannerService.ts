@@ -47,6 +47,8 @@ export class ScannerService {
       // Fetch ALL messages in channel / range / topic (replyTo = topic_id)
       messages = await telegramClient.fetchMessages(effectiveChatId, effectiveFromId, effectiveToId, 0, topic_id);
     }
+    
+    console.log(`[DEBUG] fetchMessages returned ${messages.length} messages for topic_id: ${topic_id}`);
 
     const deletedTombstones = dbService.getDeletedTombstones();
     const validMessages = messages.filter((msg: any) => msg && msg.id && !deletedTombstones.has(msg.id));
