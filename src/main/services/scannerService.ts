@@ -91,8 +91,9 @@ export class ScannerService {
         }
         
         // If message has no replyTo, it belongs to General topic (which is topic 1 in Telegram).
+        const isForumTopicReply = replyToObj?.forumTopic;
         if (msg.id == topic_id) return true; // The topic creation message itself
-        if (topic_id == 1 && (!msgTopicId || msgTopicId === null)) return true;
+        if (topic_id == 1 && (!msgTopicId || msgTopicId === null) && !isForumTopicReply) return true;
         
         return false;
       });
@@ -487,13 +488,20 @@ export class ScannerService {
 
     let validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId && !existingMsgIds.has(msg.id) && !deletedTombstones.has(msg.id));
     
-    if (session.topic_id && session.is_forum) {
+    if (session.topic_id) {
       validNewMessages = validNewMessages.filter((msg: any) => {
         const replyToObj = msg.replyTo;
         const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId;
-        if (msgTopicId) return msgTopicId === session.topic_id;
-        if (msg.id === session.topic_id) return true;
-        if (session.topic_id === 1 && !msgTopicId) return true;
+        
+        if (msgTopicId !== undefined && msgTopicId !== null) {
+          if (msgTopicId == session.topic_id) return true;
+          return false;
+        }
+        
+        const isForumTopicReply = replyToObj?.forumTopic;
+        if (msg.id == session.topic_id) return true;
+        if (session.topic_id == 1 && (!msgTopicId || msgTopicId === null) && !isForumTopicReply) return true;
+        
         return false;
       });
     }
