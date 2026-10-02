@@ -102,6 +102,26 @@ export const QueueView: React.FC<QueueViewProps> = ({
 
   // Delete Card Modal State
   const [deleteCardSession, setDeleteCardSession] = useState<DownloadSession | null>(null);
+  const [deleteGroupSessions, setDeleteGroupSessions] = useState<{ chatTitle: string; sessions: DownloadSession[] } | null>(null);
+
+  const handlePromptDeleteGroup = (group: { chatTitle: string; sessions: DownloadSession[] }, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setDeleteGroupSessions(group);
+  };
+
+  const handleConfirmDeleteGroup = async (deleteFilesOnDisk: boolean) => {
+    if (!deleteGroupSessions) return;
+    const sessionsToDelete = deleteGroupSessions.sessions;
+    setDeleteGroupSessions(null);
+    for (const s of sessionsToDelete) {
+      await (window as any).electronAPI?.deleteSession?.(s.id, deleteFilesOnDisk);
+      if (internalSessionId === s.id) {
+        setInternalSessionId(null);
+        onSelectSession(null);
+      }
+    }
+    onRefresh();
+  };
 
   const handlePromptDeleteCard = (session: DownloadSession, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -289,6 +309,22 @@ export const QueueView: React.FC<QueueViewProps> = ({
   const handleResumeSession = async (sessionId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     await (window as any).electronAPI?.resumeSession?.(sessionId);
+    onRefresh();
+  };
+
+  const handlePauseGroup = async (group: { sessions: DownloadSession[] }, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    for (const s of group.sessions) {
+      await (window as any).electronAPI?.pauseSession?.(s.id);
+    }
+    onRefresh();
+  };
+
+  const handleResumeGroup = async (group: { sessions: DownloadSession[] }, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    for (const s of group.sessions) {
+      await (window as any).electronAPI?.resumeSession?.(s.id);
+    }
     onRefresh();
   };
 
@@ -1199,6 +1235,15 @@ export const QueueView: React.FC<QueueViewProps> = ({
 
                         {/* Accordion Expand Action */}
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                          {(gDownloading > 0 || gQueued > 0) && !gIsComplete && (
+                            <button onClick={e => handlePauseGroup(group, e)} className="btn btn-secondary" style={{ padding: '6px', color: '#94a3b8' }} title="Pause All Topics"><Pause size={14} /></button>
+                          )}
+                          {(gPaused > 0 || gFailed > 0) && !gIsComplete && (
+                            <button onClick={e => handleResumeGroup(group, e)} className="btn btn-primary" style={{ padding: '6px' }} title="Resume All Topics"><Play size={14} /></button>
+                          )}
+                          <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
+                          <button onClick={e => handlePromptDeleteGroup(group, e)} className="btn btn-secondary" style={{ padding: '6px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)' }} title="Remove All Topics from Queue"><Trash2 size={14} color="#ef4444" /></button>
+                          
                           <button
                             onClick={e => { e.stopPropagation(); toggleGroupExpand(group.groupKey); }}
                             className="btn btn-secondary"
@@ -1701,6 +1746,85 @@ export const QueueView: React.FC<QueueViewProps> = ({
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
               <button
                 onClick={() => setDeleteCardSession(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '0.8rem' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Forum Group Modal ── */}
+      {deleteGroupSessions && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999,
+          background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '480px', borderRadius: '16px', padding: '24px',
+            border: '1px solid rgba(239, 68, 68, 0.4)', background: '#0f172a',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', gap: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '42px', height: '42px', borderRadius: '12px', flexShrink: 0,
+                background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Trash2 size={22} color="#ef4444" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#fff' }}>
+                  Delete Forum Supergroup
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                  "{deleteGroupSessions.chatTitle}"
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.4', margin: 0 }}>
+              How would you like to delete this supergroup and ALL its {deleteGroupSessions.sessions.length} topics?
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                onClick={() => handleConfirmDeleteGroup(false)}
+                className="btn"
+                style={{
+                  padding: '12px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '0.84rem',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer'
+                }}
+              >
+                <strong style={{ fontSize: '0.88rem', color: '#00d4ff' }}>📁 Remove Card Only (Keep files on disk)</strong>
+                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                  Removes the group & queue list from TeleFlow. All files already downloaded to your disk remain 100% safe.
+                </span>
+              </button>
+
+              <button
+                onClick={() => handleConfirmDeleteGroup(true)}
+                className="btn"
+                style={{
+                  padding: '12px 16px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fff', fontSize: '0.84rem',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer'
+                }}
+              >
+                <strong style={{ fontSize: '0.88rem', color: '#f87171' }}>⚠️ Delete Group & Delete Files from Disk</strong>
+                <span style={{ fontSize: '0.74rem', color: 'rgba(248, 113, 113, 0.85)', marginTop: '3px' }}>
+                  Permanently deletes all downloaded files for ALL topics in this group from your computer disk.
+                </span>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+              <button
+                onClick={() => setDeleteGroupSessions(null)}
                 className="btn btn-secondary"
                 style={{ padding: '8px 16px', fontSize: '0.8rem' }}
               >
