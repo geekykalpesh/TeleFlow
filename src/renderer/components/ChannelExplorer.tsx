@@ -331,6 +331,40 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
     }
   };
 
+  const handleEnqueueSpecificTopics = async (topicIds: number[]) => {
+    if (!selectedChat || topicIds.length === 0) return;
+
+    let targetFolder = customDestination;
+    if (!targetFolder) {
+      try {
+        const api = getApi();
+        const picked = await api.selectDirectory();
+        if (picked) { targetFolder = picked; setCustomDestination(picked); }
+      } catch (e) {}
+    }
+
+    setAddingToQueue(true);
+    setError(null);
+
+    const options: ScanOptions = {
+      chat_id: selectedChat.id,
+      chat_title: selectedChat.title,
+      destination_path: targetFolder || undefined,
+      session_title: `${selectedChat.title}`,
+      target_topic_ids: topicIds
+    };
+
+    try {
+      const api = getApi();
+      await api.scanAllTopics(options);
+      await api.startQueue();
+      onSessionCreated();
+    } catch (err: any) {
+      setError(err.message || 'Failed to enqueue topics');
+      setAddingToQueue(false);
+    }
+  };
+
   const formatSize = (bytes: number) => {
     if (!bytes || bytes === 0) return '—';
     const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
@@ -503,9 +537,21 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#00d4ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   💬 FORUM TOPICS ({forumTopics.length})
                 </span>
-                <button onClick={handleEnqueueAllTopics} className="btn btn-primary" disabled={addingToQueue} style={{ padding: '4px 12px', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                  <FolderPlus size={13} /> Enqueue All Topics (Auto Create Subfolders)
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {activeTopicId !== undefined && (
+                    <button 
+                      onClick={() => handleEnqueueSpecificTopics([activeTopicId])} 
+                      className="btn btn-secondary" 
+                      disabled={addingToQueue} 
+                      style={{ padding: '4px 12px', fontSize: '0.72rem', whiteSpace: 'nowrap', borderColor: '#00d4ff', color: '#00d4ff', background: 'rgba(0, 212, 255, 0.1)' }}
+                    >
+                      <FolderPlus size={13} /> Enqueue Active Topic
+                    </button>
+                  )}
+                  <button onClick={handleEnqueueAllTopics} className="btn btn-primary" disabled={addingToQueue} style={{ padding: '4px 12px', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                    <FolderPlus size={13} /> Enqueue All Topics (Auto Folders)
+                  </button>
+                </div>
               </div>
 
               {/* Topic pills */}

@@ -108,6 +108,7 @@ export interface ScanOptions {
   chat_title: string;
   topic_id?: number;
   topic_title?: string;
+  target_topic_ids?: number[];
   all_topics?: boolean;
   from_message_id?: number;
   to_message_id?: number;

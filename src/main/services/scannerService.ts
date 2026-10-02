@@ -281,10 +281,15 @@ export class ScannerService {
   }
 
   public async scanAndEnqueueAllTopics(options: ScanOptions): Promise<DownloadSession[]> {
-    const topics = await telegramClient.getForumTopics(options.chat_id);
+    let topics = await telegramClient.getForumTopics(options.chat_id);
     if (!topics || topics.length === 0) {
       const session = await this.scanAndEnqueue(options);
       return [session];
+    }
+
+    if (options.target_topic_ids && options.target_topic_ids.length > 0) {
+      const targetIds = new Set(options.target_topic_ids);
+      topics = topics.filter(t => targetIds.has(t.id));
     }
 
     const sessions: DownloadSession[] = [];
