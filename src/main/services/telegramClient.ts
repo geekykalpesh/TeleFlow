@@ -24,6 +24,9 @@ class TelegramClientService {
   private abortControllers: Map<string, AbortController> = new Map();
   private abortedItemIds: Set<string> = new Set();
   private entityCache: Map<string, any> = new Map();
+  
+  private forumTopicsCache: Map<string, TelegramForumTopic[]> = new Map();
+  private forumTopicsCacheTime: Map<string, number> = new Map();
 
   public async handleFloodWait<T>(fn: () => Promise<T>, maxRetries: number = 5): Promise<T> {
     let attempt = 0;
@@ -373,22 +376,32 @@ class TelegramClientService {
 
   public async getForumTopics(chatId: string): Promise<TelegramForumTopic[]> {
     if (!this.client) throw new Error('Telegram client is not connected.');
+    
+    // Cache for 5 minutes
+    const now = Date.now();
+    const cachedTime = this.forumTopicsCacheTime.get(chatId) || 0;
+    if (this.forumTopicsCache.has(chatId) && (now - cachedTime) < 5 * 60 * 1000) {
+      return this.forumTopicsCache.get(chatId)!;
+    }
+
     const entity = await this.resolveEntity(chatId);
 
     try {
-      const res = await this.client.invoke(
-        new Api.channels.GetForumTopics({
-          channel: entity,
-          offsetDate: 0,
-          offsetId: 0,
-          offsetTopic: 0,
-          limit: 100
-        })
-      ) as any;
+      const res = await this.handleFloodWait(async () => {
+        return await this.client!.invoke(
+          new Api.channels.GetForumTopics({
+            channel: entity,
+            offsetDate: 0,
+            offsetId: 0,
+            offsetTopic: 0,
+            limit: 100
+          })
+        ) as any;
+      });
 
       if (!res || !res.topics) return [];
 
-      return res.topics.map((t: any) => ({
+      const topics = res.topics.map((t: any) => ({
         id: t.id,
         title: t.title || `Topic #${t.id}`,
         iconColor: t.iconColor,
@@ -396,8 +409,17 @@ class TelegramClientService {
         topMessageId: t.topMessage,
         messagesCount: t.totalMessages
       }));
+      
+      this.forumTopicsCache.set(chatId, topics);
+      this.forumTopicsCacheTime.set(chatId, now);
+      
+      return topics;
     } catch (err: any) {
       console.warn(`[TelegramClient] Failed to fetch forum topics for ${chatId}:`, err);
+      // Return cached topics if available even if expired, as fallback
+      if (this.forumTopicsCache.has(chatId)) {
+         return this.forumTopicsCache.get(chatId)!;
+      }
       return [];
     }
   }
