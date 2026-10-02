@@ -1,6 +1,6 @@
 {
   "name": "teleflow",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Desktop Telegram Client and Sequential File Downloader with Deterministic Ordering",
   "main": "dist-electron/index.js",
   "scripts": {
@@ -44,6 +44,7 @@
     "dotenv": "^17.4.2",
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
+    "sharp": "^0.35.5",
     "typescript": "^5.7.3",
     "vite": "^6.1.1",
     "vite-plugin-electron": "^0.29.0",
@@ -80,7 +81,10 @@
       "publisher": "CN=726BA665-AF92-49E8-825D-51C24EAB8B00",
       "publisherDisplayName": "geekykalpesh",
       "displayName": "Teleflow",
-      "languages": ["en-US"]
+      "languages": [
+        "en-US"
+      ],
+      "backgroundColor": "transparent"
     },
     "nsis": {
       "oneClick": false,
