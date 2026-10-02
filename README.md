@@ -4,7 +4,7 @@
 
 # TeleFlow — Desktop Telegram Client & High-Speed Sequential Downloader
 
-[![Version](https://img.shields.io/badge/version-1.8.7-00d4ff.svg)](https://github.com/geekykalpesh/TeleFlow/releases/tag/v1.8.7)
+[![Version](https://img.shields.io/badge/version-1.8.8-00d4ff.svg)](https://github.com/geekykalpesh/TeleFlow/releases/tag/v1.8.8)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-3b82f6.svg)](https://github.com/geekykalpesh/TeleFlow/releases)
 [![Electron](https://img.shields.io/badge/Electron-34.5.8-47858c.svg)](https://www.electronjs.org/)
@@ -14,7 +14,7 @@
 
 ---
 
-## 🌟 Key Features (v1.8.7)
+## 🌟 Key Features (v1.8.8)
 
 ### 1. 🗑️ Instant Multi-Select, Context Menu & File Deletion (Disk & Queue)
 - **Checkboxes & Select All**: Select multiple files or all channel files at once with a header checkbox.
@@ -38,18 +38,18 @@
 
 ---
 
-## 📦 Downloads (Version 1.8.7)
+## 📦 Downloads (Version 1.8.8)
 
-Download the latest pre-compiled binaries for your operating system from [GitHub Releases](https://github.com/geekykalpesh/TeleFlow/releases/tag/v1.8.7):
+Download the latest pre-compiled binaries for your operating system from [GitHub Releases](https://github.com/geekykalpesh/TeleFlow/releases/tag/v1.8.8):
 
 | Platform | Format | File Name | Description |
 |---|---|---|---|
-| 🪟 **Windows** | `.exe` | `TeleFlow Setup 1.8.7.exe` | Standard Windows NSIS Installer |
-| 🪟 **Windows** | `.exe` | `TeleFlow 1.8.7.exe` | Portable Executable (No installation required) |
-| 🍎 **macOS** | `.dmg` | `TeleFlow-1.8.7.dmg` | Apple Silicon & Intel macOS Disk Image |
-| 🍎 **macOS** | `.zip` | `TeleFlow-1.8.7-mac.zip` | Portable zipped macOS application bundle |
-| 🐧 **Linux** | `.AppImage` | `TeleFlow-1.8.7.AppImage` | Universal Linux AppImage binary |
-| 🐧 **Linux** | `.deb` | `teleflow_1.8.7_amd64.deb` | Debian / Ubuntu installer package |
+| 🪟 **Windows** | `.exe` | `TeleFlow Setup 1.8.8.exe` | Standard Windows NSIS Installer |
+| 🪟 **Windows** | `.exe` | `TeleFlow 1.8.8.exe` | Portable Executable (No installation required) |
+| 🍎 **macOS** | `.dmg` | `TeleFlow-1.8.8.dmg` | Apple Silicon & Intel macOS Disk Image |
+| 🍎 **macOS** | `.zip` | `TeleFlow-1.8.8-mac.zip` | Portable zipped macOS application bundle |
+| 🐧 **Linux** | `.AppImage` | `TeleFlow-1.8.8.AppImage` | Universal Linux AppImage binary |
+| 🐧 **Linux** | `.deb` | `teleflow_1.8.8_amd64.deb` | Debian / Ubuntu installer package |
 
 ---
 
@@ -104,18 +104,18 @@ Download the latest pre-compiled binaries for your operating system from [GitHub
   npm run build:linux
   ```
 
-Executables are compiled into `./release/1.8.7/`.
+Executables are compiled into `./release/1.8.8/`.
 
 ---
 
-## 🚀 Publishing Version 1.8.7 to GitHub
+## 🚀 Publishing Version 1.8.8 to GitHub
 
 To trigger the automated GitHub Actions CI/CD release workflow for all platforms:
 
 ```bash
 git add .
-git commit -m "Release v1.8.7"
-git tag v1.8.7
+git commit -m "Release v1.8.8"
+git tag v1.8.8
 git push origin main --tags
 ```
 

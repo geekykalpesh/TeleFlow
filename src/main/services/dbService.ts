@@ -84,6 +84,14 @@ class DbService {
       this.db.run(`ALTER TABLE sessions ADD COLUMN sync_enabled INTEGER NOT NULL DEFAULT 1`);
     } catch (e) {}
 
+    try {
+      this.db.run(`ALTER TABLE sessions ADD COLUMN topic_id INTEGER`);
+    } catch (e) {}
+
+    try {
+      this.db.run(`ALTER TABLE sessions ADD COLUMN is_forum INTEGER DEFAULT 0`);
+    } catch (e) {}
+
     this.db.run(`
       CREATE TABLE IF NOT EXISTS download_items (
         id TEXT PRIMARY KEY,
@@ -203,7 +211,7 @@ class DbService {
 
   public getSessions(): DownloadSession[] {
     if (!this.db) return [];
-    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions ORDER BY created_at DESC`);
+    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, topic_id, is_forum, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions ORDER BY created_at DESC`);
     if (!res.length) return [];
     
     const rows = res[0].values;
@@ -215,17 +223,19 @@ class DbService {
         title: row[1],
         chat_id: row[2],
         chat_title: row[3],
-        from_message_id: row[4],
-        to_message_id: row[5],
-        destination_path: row[6],
-        add_sequence_prefix: Boolean(row[7]),
-        sequence_padding: row[8],
-        download_mode: row[9],
-        concurrency: row[10],
-        created_at: row[11],
-        status: row[12],
-        download_enabled: row[13] === undefined || row[13] === null ? true : Boolean(row[13]),
-        sync_enabled: row[14] === undefined || row[14] === null ? true : Boolean(row[14]),
+        topic_id: row[4] ? Number(row[4]) : undefined,
+        is_forum: Boolean(row[5]),
+        from_message_id: row[6],
+        to_message_id: row[7],
+        destination_path: row[8],
+        add_sequence_prefix: Boolean(row[9]),
+        sequence_padding: row[10],
+        download_mode: row[11],
+        concurrency: row[12],
+        created_at: row[13],
+        status: row[14],
+        download_enabled: row[15] === undefined || row[15] === null ? true : Boolean(row[15]),
+        sync_enabled: row[16] === undefined || row[16] === null ? true : Boolean(row[16]),
         total_files: stats.total_files,
         completed_files: stats.completed_files,
         total_bytes: stats.total_bytes,
@@ -237,7 +247,7 @@ class DbService {
   public getSessionById(sessionId: string): DownloadSession | null {
     if (!this.db) return null;
     const cleanId = sessionId.replace(/'/g, "''");
-    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions WHERE id = '${cleanId}'`);
+    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, topic_id, is_forum, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions WHERE id = '${cleanId}'`);
     if (!res.length || !res[0].values.length) return null;
     const row = res[0].values[0];
     const stats = this.getSessionStats(sessionId);
@@ -246,17 +256,19 @@ class DbService {
       title: row[1] as string,
       chat_id: row[2] as string,
       chat_title: row[3] as string,
-      from_message_id: row[4] as number,
-      to_message_id: row[5] as number,
-      destination_path: row[6] as string,
-      add_sequence_prefix: Boolean(row[7]),
-      sequence_padding: row[8] as number,
-      download_mode: row[9] as any,
-      concurrency: row[10] as number,
-      created_at: row[11] as string,
-      status: row[12] as any,
-      download_enabled: row[13] === undefined || row[13] === null ? true : Boolean(row[13]),
-      sync_enabled: row[14] === undefined || row[14] === null ? true : Boolean(row[14]),
+      topic_id: row[4] ? Number(row[4]) : undefined,
+      is_forum: Boolean(row[5]),
+      from_message_id: row[6] as number,
+      to_message_id: row[7] as number,
+      destination_path: row[8] as string,
+      add_sequence_prefix: Boolean(row[9]),
+      sequence_padding: row[10] as number,
+      download_mode: row[11] as any,
+      concurrency: row[12] as number,
+      created_at: row[13] as string,
+      status: row[14] as any,
+      download_enabled: row[15] === undefined || row[15] === null ? true : Boolean(row[15]),
+      sync_enabled: row[16] === undefined || row[16] === null ? true : Boolean(row[16]),
       total_files: stats.total_files,
       completed_files: stats.completed_files,
       total_bytes: stats.total_bytes,
