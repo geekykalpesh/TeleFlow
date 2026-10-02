@@ -100,6 +100,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
 
   const [forumTopics, setForumTopics] = useState<any[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<number | undefined>(undefined);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<Set<number>>(new Set());
 
   // Auto-scan ALL messages in a channel or topic thread
   const handleGoInsideGroup = async (chat: TelegramChat, targetTopicId?: number) => {
@@ -538,7 +539,17 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                   💬 FORUM TOPICS ({forumTopics.length})
                 </span>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {activeTopicId !== undefined && (
+                  {selectedTopicIds.size > 0 && (
+                    <button 
+                      onClick={() => handleEnqueueSpecificTopics(Array.from(selectedTopicIds))} 
+                      className="btn btn-secondary" 
+                      disabled={addingToQueue} 
+                      style={{ padding: '4px 12px', fontSize: '0.72rem', whiteSpace: 'nowrap', borderColor: '#c084fc', color: '#c084fc', background: 'rgba(192, 132, 252, 0.1)' }}
+                    >
+                      <FolderPlus size={13} /> Enqueue {selectedTopicIds.size} Selected Topics
+                    </button>
+                  )}
+                  {activeTopicId !== undefined && selectedTopicIds.size === 0 && (
                     <button 
                       onClick={() => handleEnqueueSpecificTopics([activeTopicId])} 
                       className="btn btn-secondary" 
@@ -555,7 +566,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
               </div>
 
               {/* Topic pills */}
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '90px', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '120px', overflowY: 'auto' }}>
                 <button
                   onClick={() => handleGoInsideGroup(selectedChat)}
                   style={{
@@ -567,17 +578,36 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                   🌐 All Messages
                 </button>
                 {forumTopics.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => handleGoInsideGroup(selectedChat, t.id)}
-                    style={{
-                      padding: '3px 10px', borderRadius: '16px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600,
-                      background: activeTopicId === t.id ? '#00d4ff' : 'rgba(255,255,255,0.08)',
-                      color: activeTopicId === t.id ? '#0c0f17' : 'var(--text-main)', border: 'none'
-                    }}
-                  >
-                    💬 {t.title} {t.messagesCount ? `(${t.messagesCount})` : ''}
-                  </button>
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', background: activeTopicId === t.id ? '#00d4ff' : 'rgba(255,255,255,0.08)', borderRadius: '16px', paddingRight: '4px' }}>
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTopicIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(t.id)) next.delete(t.id);
+                          else next.add(t.id);
+                          return next;
+                        });
+                      }}
+                      style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                    >
+                      {selectedTopicIds.has(t.id) ? (
+                        <CheckSquare size={13} color={activeTopicId === t.id ? '#0c0f17' : '#c084fc'} />
+                      ) : (
+                        <Square size={13} color={activeTopicId === t.id ? 'rgba(0,0,0,0.5)' : 'var(--text-muted)'} />
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleGoInsideGroup(selectedChat, t.id)}
+                      style={{
+                        padding: '3px 6px 3px 0', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600,
+                        background: 'transparent',
+                        color: activeTopicId === t.id ? '#0c0f17' : 'var(--text-main)', border: 'none'
+                      }}
+                    >
+                      💬 {t.title} {t.messagesCount ? `(${t.messagesCount})` : ''}
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
