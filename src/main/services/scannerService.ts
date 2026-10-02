@@ -75,9 +75,26 @@ export class ScannerService {
     const selectedSet = options.selected_message_ids && options.selected_message_ids.length > 0
       ? new Set(options.selected_message_ids)
       : null;
-    const filteredMessages = selectedSet
+    let filteredMessages = selectedSet
       ? validMessages.filter((msg: any) => selectedSet.has(msg.id))
       : validMessages;
+
+    if (topic_id && isForumGroup) {
+      filteredMessages = filteredMessages.filter((msg: any) => {
+        const replyToObj = msg.replyTo;
+        const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId;
+        
+        if (msgTopicId) {
+          return msgTopicId === topic_id;
+        }
+        
+        // If message has no replyTo, it belongs to General topic (which is topic 1 in Telegram).
+        if (msg.id === topic_id) return true; // The topic creation message itself
+        if (topic_id === 1 && !msgTopicId) return true;
+        
+        return false;
+      });
+    }
 
     filteredMessages.forEach((msg: any) => {
       const mediaInfo = this.extractMediaDetails(msg);
@@ -459,10 +476,23 @@ export class ScannerService {
       session.chat_id,
       maxMessageId > 0 ? maxMessageId : undefined,
       undefined,
-      0
+      0,
+      session.topic_id
     );
 
-    const validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId && !existingMsgIds.has(msg.id) && !deletedTombstones.has(msg.id));
+    let validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId && !existingMsgIds.has(msg.id) && !deletedTombstones.has(msg.id));
+    
+    if (session.topic_id && session.is_forum) {
+      validNewMessages = validNewMessages.filter((msg: any) => {
+        const replyToObj = msg.replyTo;
+        const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId;
+        if (msgTopicId) return msgTopicId === session.topic_id;
+        if (msg.id === session.topic_id) return true;
+        if (session.topic_id === 1 && !msgTopicId) return true;
+        return false;
+      });
+    }
+
     if (validNewMessages.length === 0) {
       return { addedCount: 0, message: `Channel "${session.title}" is up to date.` };
     }
