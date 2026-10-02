@@ -79,21 +79,26 @@ export class ScannerService {
       ? validMessages.filter((msg: any) => selectedSet.has(msg.id))
       : validMessages;
 
-    if (topic_id && isForumGroup) {
+    if (topic_id) {
+      console.log(`[DEBUG] Applying topic filter. topic_id=${topic_id} (type: ${typeof topic_id}), total messages before filter: ${filteredMessages.length}`);
       filteredMessages = filteredMessages.filter((msg: any) => {
         const replyToObj = msg.replyTo;
         const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId;
         
-        if (msgTopicId) {
-          return msgTopicId === topic_id;
+        if (msgTopicId !== undefined && msgTopicId !== null) {
+          if (msgTopicId == topic_id) return true; // Used loose equality just in case of BigInt vs Number vs String
+          return false;
         }
         
         // If message has no replyTo, it belongs to General topic (which is topic 1 in Telegram).
-        if (msg.id === topic_id) return true; // The topic creation message itself
-        if (topic_id === 1 && !msgTopicId) return true;
+        if (msg.id == topic_id) return true; // The topic creation message itself
+        if (topic_id == 1 && (!msgTopicId || msgTopicId === null)) return true;
         
         return false;
       });
+      console.log(`[DEBUG] After filter: ${filteredMessages.length} messages remaining.`);
+    } else {
+      console.log(`[DEBUG] NOT applying filter. topic_id=${topic_id}`);
     }
 
     filteredMessages.forEach((msg: any) => {
