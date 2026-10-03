@@ -35,12 +35,16 @@ export class ScannerService {
     let messages: any[] = [];
 
     if (options.selected_message_ids && options.selected_message_ids.length > 0) {
-      const chunkSize = 200;
+      const chunkSize = 50; // 🔴 Reduced from 200 to 50 for safety
       for (let i = 0; i < options.selected_message_ids.length; i += chunkSize) {
         const chunkIds = options.selected_message_ids.slice(i, i + chunkSize);
         const chunkMsgs = await telegramClient.getMessagesByIds(effectiveChatId, chunkIds);
         if (chunkMsgs && chunkMsgs.length > 0) {
           messages.push(...chunkMsgs);
+        }
+        // 🔴 Human-like delay between chunk fetches
+        if (i + chunkSize < options.selected_message_ids.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
         }
       }
     } else {

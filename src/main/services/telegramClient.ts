@@ -88,7 +88,7 @@ class TelegramClientService {
           appVersion: '1.6.0',
           testServers: this.serverEnvironment === 'test',
           useWSS: false,
-          maxConcurrentDownloads: 20,
+          maxConcurrentDownloads: 2, // 🔴 Reduced from 20 to 2 to prevent spam detection
           autoReconnect: true
         });
         await this.client.connect();
@@ -600,6 +600,9 @@ class TelegramClientService {
       if (batch.length < 100) break;
 
       currentOffsetId = oldestInBatch;
+      
+      // 🔴 Human-like delay (1.5s to 3s) to prevent FLOOD_WAIT and anti-spam detection
+      await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500));
     }
 
     return allMessages;
