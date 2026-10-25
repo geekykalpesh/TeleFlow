@@ -487,8 +487,19 @@ class TelegramClientService {
     const parsedFrom = parseTelegramLink(fromMsgId);
     const parsedTo = parseTelegramLink(toMsgId);
 
+    const effectiveReplyTo = replyTo ?? parsedFrom.topicId ?? parsedTo.topicId;
+    const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chatId;
+    const entity = await this.resolveEntity(effectiveChatId);
+
     let rawFrom = parsedFrom.messageId ?? (typeof fromMsgId === 'number' ? fromMsgId : (fromMsgId ? parseInt(String(fromMsgId), 10) : undefined));
     let rawTo = parsedTo.messageId ?? (typeof toMsgId === 'number' ? toMsgId : (toMsgId ? parseInt(String(toMsgId), 10) : undefined));
+
+    if (parsedFrom.topicId && effectiveReplyTo && parsedFrom.topicId !== effectiveReplyTo) {
+      rawFrom = undefined;
+    }
+    if (parsedTo.topicId && effectiveReplyTo && parsedTo.topicId !== effectiveReplyTo) {
+      rawTo = undefined;
+    }
 
     if (isNaN(rawFrom as any)) rawFrom = undefined;
     if (isNaN(rawTo as any)) rawTo = undefined;
@@ -500,10 +511,6 @@ class TelegramClientService {
       minId = maxId;
       maxId = temp;
     }
-
-    const effectiveReplyTo = replyTo ?? parsedFrom.topicId ?? parsedTo.topicId;
-    const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chatId;
-    const entity = await this.resolveEntity(effectiveChatId);
 
     const effectiveMaxId = offsetId ?? (maxId ? maxId + 1 : undefined);
     const effectiveMinId = minId ? minId - 1 : undefined;
@@ -642,6 +649,17 @@ class TelegramClientService {
     let rawFrom = parsedFrom.messageId ?? (typeof fromId === 'number' ? fromId : (fromId ? parseInt(String(fromId), 10) : undefined));
     let rawTo = parsedTo.messageId ?? (typeof toId === 'number' ? toId : (toId ? parseInt(String(toId), 10) : undefined));
 
+    const effectiveReplyTo = replyTo ?? parsedFrom.topicId ?? parsedTo.topicId;
+    const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chatId;
+    const entity = await this.resolveEntity(effectiveChatId);
+
+    if (parsedFrom.topicId && effectiveReplyTo && parsedFrom.topicId !== effectiveReplyTo) {
+      rawFrom = undefined;
+    }
+    if (parsedTo.topicId && effectiveReplyTo && parsedTo.topicId !== effectiveReplyTo) {
+      rawTo = undefined;
+    }
+
     if (isNaN(rawFrom as any)) rawFrom = undefined;
     if (isNaN(rawTo as any)) rawTo = undefined;
 
@@ -652,10 +670,6 @@ class TelegramClientService {
       minId = maxId;
       maxId = temp;
     }
-
-    const effectiveReplyTo = replyTo ?? parsedFrom.topicId ?? parsedTo.topicId;
-    const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chatId;
-    const entity = await this.resolveEntity(effectiveChatId);
 
     // Single batch fetch for explicit small preview limits
     if (limit > 0 && limit <= 500) {

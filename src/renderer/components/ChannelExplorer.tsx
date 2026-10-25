@@ -84,11 +84,8 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
         if (parsed.topicId) {
           setActiveTopicId(parsed.topicId);
         }
-        if (parsed.messageId) {
-          setFromMsgId(String(parsed.messageId));
-        }
         if (parsed.chatId) {
-          handleGoInsideGroup(res[0], parsed.topicId || undefined);
+          handleGoInsideGroup(res[0], parsed.topicId || undefined, true);
         }
       }
     } catch (err: any) {
@@ -103,9 +100,13 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<number>>(new Set());
 
   // Auto-scan ALL messages in a channel or topic thread
-  const handleGoInsideGroup = async (chat: TelegramChat, targetTopicId?: number) => {
+  const handleGoInsideGroup = async (chat: TelegramChat, targetTopicId?: number, resetRange: boolean = false) => {
     setSelectedChat(chat);
     setActiveTopicId(targetTopicId);
+    if (resetRange) {
+      setFromMsgId('');
+      setToMsgId('');
+    }
     setLoading(true);
     setError(null);
     setAllMessages([]);
@@ -121,20 +122,29 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
       const api = getApi();
 
       // Fetch forum topics if group/forum
-      if (!targetTopicId) {
+      if (forumTopics.length === 0 || !targetTopicId) {
         try {
           const tRes = await api.getForumTopics(chat.id);
-          setForumTopics(tRes || []);
+          if (tRes && tRes.length > 0) {
+            setForumTopics(tRes);
+          }
         } catch (e) {
-          setForumTopics([]);
+          if (forumTopics.length === 0) setForumTopics([]);
         }
       }
 
-      const parsedFrom = parseTelegramLink(fromMsgId);
-      const parsedTo = parseTelegramLink(toMsgId);
+      const parsedFrom = resetRange ? { chatId: null, messageId: null, topicId: null } : parseTelegramLink(fromMsgId);
+      const parsedTo = resetRange ? { chatId: null, messageId: null, topicId: null } : parseTelegramLink(toMsgId);
 
-      let from = parsedFrom.messageId ?? (fromMsgId ? parseInt(fromMsgId, 10) : undefined);
-      let to = parsedTo.messageId ?? (toMsgId ? parseInt(toMsgId, 10) : undefined);
+      let from = resetRange ? undefined : (parsedFrom.messageId ?? (fromMsgId ? parseInt(fromMsgId, 10) : undefined));
+      let to = resetRange ? undefined : (parsedTo.messageId ?? (toMsgId ? parseInt(toMsgId, 10) : undefined));
+
+      if (parsedFrom.topicId && targetTopicId && parsedFrom.topicId !== targetTopicId) {
+        from = undefined;
+      }
+      if (parsedTo.topicId && targetTopicId && parsedTo.topicId !== targetTopicId) {
+        to = undefined;
+      }
 
       if (isNaN(from as any)) from = undefined;
       if (isNaN(to as any)) to = undefined;
@@ -456,7 +466,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
           </p>
         </div>
         {selectedChat && (
-          <button onClick={() => { setSelectedChat(null); setAllMessages([]); setSelectedMsgIds(new Set()); setForumTopics([]); setActiveTopicId(undefined); }} className="btn btn-secondary">
+          <button onClick={() => { setSelectedChat(null); setAllMessages([]); setSelectedMsgIds(new Set()); setForumTopics([]); setActiveTopicId(undefined); setFromMsgId(''); setToMsgId(''); }} className="btn btn-secondary">
             <ArrowLeft size={15} /> Back to Search
           </button>
         )}
@@ -527,7 +537,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                   <div 
                     key={chat.id} 
                     className="list-row" 
-                    onClick={() => handleGoInsideGroup(chat)}
+                    onClick={() => handleGoInsideGroup(chat, undefined, true)}
                     style={{ 
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
                       background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', 
@@ -615,7 +625,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
               {/* Topic pills */}
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '120px', overflowY: 'auto' }}>
                 <button
-                  onClick={() => handleGoInsideGroup(selectedChat)}
+                  onClick={() => handleGoInsideGroup(selectedChat, undefined, true)}
                   style={{
                     padding: '3px 10px', borderRadius: '16px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600,
                     background: activeTopicId === undefined ? '#00d4ff' : 'rgba(255,255,255,0.08)',
@@ -645,7 +655,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                       )}
                     </div>
                     <button
-                      onClick={() => handleGoInsideGroup(selectedChat, t.id)}
+                      onClick={() => handleGoInsideGroup(selectedChat, t.id, true)}
                       title={`${t.videoCount || 0} videos, ${t.documentCount || 0} documents, ${t.photoCount || 0} photos`}
                       style={{
                         padding: '3px 6px 3px 0', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600,
@@ -660,6 +670,51 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
               </div>
             </div>
           )}
+
+          {/* ── Message Range / Telegram Links Filter Bar ── */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.74rem', color: '#00d4ff', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Settings2 size={13} /> Message Range:
+            </span>
+            <input
+              type="text"
+              placeholder="First Msg Link / ID (e.g. 73)"
+              value={fromMsgId}
+              onChange={e => setFromMsgId(e.target.value)}
+              className="input-field"
+              style={{ fontSize: '0.74rem', padding: '4px 10px', width: '180px' }}
+            />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>→</span>
+            <input
+              type="text"
+              placeholder="Last Msg Link / ID (e.g. 154)"
+              value={toMsgId}
+              onChange={e => setToMsgId(e.target.value)}
+              className="input-field"
+              style={{ fontSize: '0.74rem', padding: '4px 10px', width: '180px' }}
+            />
+            <button
+              onClick={() => handleGoInsideGroup(selectedChat, activeTopicId, false)}
+              className="btn btn-secondary"
+              style={{ padding: '4px 12px', fontSize: '0.73rem', fontWeight: 600, borderColor: '#00d4ff', color: '#00d4ff' }}
+            >
+              Filter Range
+            </button>
+            {(fromMsgId || toMsgId) && (
+              <button
+                onClick={() => { setFromMsgId(''); setToMsgId(''); handleGoInsideGroup(selectedChat, activeTopicId, true); }}
+                className="btn btn-secondary"
+                style={{ padding: '4px 12px', fontSize: '0.73rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+              >
+                Clear Range (Show All)
+              </button>
+            )}
+            {!(fromMsgId || toMsgId) && (
+              <span style={{ fontSize: '0.72rem', color: '#10b981', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                ✓ Showing entire topic history ({allMessages.length} items loaded)
+              </span>
+            )}
+          </div>
 
           {/* ── Top Action Bar ── */}
           <div style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

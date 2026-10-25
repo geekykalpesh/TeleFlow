@@ -46,6 +46,13 @@ export class ScannerService {
     const rawTopic = topic_id ?? parsedFrom.topicId ?? parsedTo.topicId;
     const effectiveTopicId = (rawTopic !== null && rawTopic !== undefined && !isNaN(Number(rawTopic))) ? Number(rawTopic) : undefined;
 
+    if (parsedFrom.topicId && effectiveTopicId && parsedFrom.topicId !== effectiveTopicId) {
+      effectiveFromId = undefined;
+    }
+    if (parsedTo.topicId && effectiveTopicId && parsedTo.topicId !== effectiveTopicId) {
+      effectiveToId = undefined;
+    }
+
     let messages: any[] = [];
 
     if (options.selected_message_ids && options.selected_message_ids.length > 0) {
