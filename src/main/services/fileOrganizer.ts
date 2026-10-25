@@ -82,6 +82,19 @@ export class FileOrganizer {
 
     // Handle collision if file already exists
     if (fs.existsSync(targetPath) && targetPath !== item.temp_path) {
+      try {
+        const existingStat = fs.statSync(targetPath);
+        if (existingStat.size === item.total_bytes && item.total_bytes > 0) {
+          console.log(`[FileOrganizer] File already exists and matches expected size (${existingStat.size} bytes). Skipping duplicate: ${targetPath}`);
+          try {
+            if (fs.existsSync(item.temp_path)) {
+              fs.unlinkSync(item.temp_path);
+            }
+          } catch (e) {}
+          return targetPath;
+        }
+      } catch (e) {}
+
       const ext = path.extname(targetPath);
       const base = targetPath.slice(0, targetPath.length - ext.length);
       targetPath = `${base}_${Date.now()}${ext}`;

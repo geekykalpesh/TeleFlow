@@ -77,6 +77,10 @@ export interface TelegramForumTopic {
   iconEmojiId?: string;
   topMessageId?: number;
   messagesCount?: number;
+  filesCount?: number;
+  videoCount?: number;
+  documentCount?: number;
+  photoCount?: number;
 }
 
 export interface TelegramChat {
@@ -88,6 +92,8 @@ export interface TelegramChat {
   unreadCount: number;
   hasMedia: boolean;
   participantsCount?: number;
+  filesCount?: number;
+  messagesCount?: number;
 }
 
 export interface GroupMessageItem {
@@ -110,8 +116,8 @@ export interface ScanOptions {
   topic_title?: string;
   target_topic_ids?: number[];
   all_topics?: boolean;
-  from_message_id?: number;
-  to_message_id?: number;
+  from_message_id?: number | string;
+  to_message_id?: number | string;
   limit?: number;
   media_types?: MediaType[];
   session_title?: string;

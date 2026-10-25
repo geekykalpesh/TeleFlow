@@ -130,8 +130,25 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
         }
       }
 
-      const from = fromMsgId ? parseInt(fromMsgId, 10) : undefined;
-      const to = toMsgId ? parseInt(toMsgId, 10) : undefined;
+      const parsedFrom = parseTelegramLink(fromMsgId);
+      const parsedTo = parseTelegramLink(toMsgId);
+
+      let from = parsedFrom.messageId ?? (fromMsgId ? parseInt(fromMsgId, 10) : undefined);
+      let to = parsedTo.messageId ?? (toMsgId ? parseInt(toMsgId, 10) : undefined);
+
+      if (isNaN(from as any)) from = undefined;
+      if (isNaN(to as any)) to = undefined;
+
+      if (from !== undefined && to !== undefined && from > to) {
+        const temp = from;
+        from = to;
+        to = temp;
+      }
+
+      const effectiveTargetTopic = targetTopicId ?? parsedFrom.topicId ?? parsedTo.topicId;
+      if (effectiveTargetTopic && activeTopicId === undefined) {
+        setActiveTopicId(effectiveTargetTopic);
+      }
 
       let accumulatedItems: GroupMessageItem[] = [];
       let currentOffsetId: number | undefined = undefined;
@@ -191,9 +208,26 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
 
     try {
       const api = getApi();
-      const from = fromMsgId ? parseInt(fromMsgId, 10) : undefined;
-      const to = toMsgId ? parseInt(toMsgId, 10) : undefined;
-      const result = await api.inspectGroupMessages(selectedChat.id, PAGE_SIZE, from, to, oldestMsgId);
+      const parsedFrom = parseTelegramLink(fromMsgId);
+      const parsedTo = parseTelegramLink(toMsgId);
+
+      let from = parsedFrom.messageId ?? (fromMsgId ? parseInt(fromMsgId, 10) : undefined);
+      let to = parsedTo.messageId ?? (toMsgId ? parseInt(toMsgId, 10) : undefined);
+
+      if (isNaN(from as any)) from = undefined;
+      if (isNaN(to as any)) to = undefined;
+
+      if (from !== undefined && to !== undefined && from > to) {
+        const temp = from;
+        from = to;
+        to = temp;
+      }
+
+      const effectiveTargetTopic = (activeTopicId ?? parsedFrom.topicId ?? parsedTo.topicId) || undefined;
+      if (effectiveTargetTopic && activeTopicId === undefined) {
+        setActiveTopicId(effectiveTargetTopic);
+      }
+      const result = await api.inspectGroupMessages(selectedChat.id, PAGE_SIZE, from, to, oldestMsgId, effectiveTargetTopic);
       const { items, hasMore: more, oldestMsgId: oldest } = result;
 
       if (items && items.length > 0) {
@@ -276,12 +310,25 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
     setAddingToQueue(true);
     setError(null);
 
+    const parsedFromQueue = parseTelegramLink(fromMsgId);
+    const parsedToQueue = parseTelegramLink(toMsgId);
+    let fromQueue = parsedFromQueue.messageId ?? (fromMsgId ? parseInt(fromMsgId, 10) : undefined);
+    let toQueue = parsedToQueue.messageId ?? (toMsgId ? parseInt(toMsgId, 10) : undefined);
+    if (isNaN(fromQueue as any)) fromQueue = undefined;
+    if (isNaN(toQueue as any)) toQueue = undefined;
+    if (fromQueue !== undefined && toQueue !== undefined && fromQueue > toQueue) {
+      const temp = fromQueue;
+      fromQueue = toQueue;
+      toQueue = temp;
+    }
+
     const options: ScanOptions = {
       chat_id: selectedChat.id,
       chat_title: selectedChat.title,
       limit: PAGE_SIZE,
-      from_message_id: fromMsgId ? parseInt(fromMsgId, 10) : undefined,
-      to_message_id: toMsgId ? parseInt(toMsgId, 10) : undefined,
+      from_message_id: fromQueue,
+      to_message_id: toQueue,
+      topic_id: (activeTopicId ?? parsedFromQueue.topicId ?? parsedToQueue.topicId) ? Number(activeTopicId ?? parsedFromQueue.topicId ?? parsedToQueue.topicId) : undefined,
       selected_message_ids: Array.from(selectedMsgIds),
       media_types: typeFilter.length > 0 ? typeFilter : undefined,
       destination_path: targetFolder || undefined,
@@ -400,7 +447,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '2px' }}>
-            {selectedChat ? `📂 ${selectedChat.title}` : 'Telegram Group & Channel Explorer'}
+            {selectedChat ? `📂 ${selectedChat.title}${activeTopicId !== undefined ? ` → ${forumTopics.find(t => t.id === activeTopicId)?.title || `Topic #${activeTopicId}`}` : ''}` : 'Telegram Group & Channel Explorer'}
           </h2>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             {selectedChat
@@ -536,7 +583,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
             <div style={{ background: 'rgba(0, 212, 255, 0.07)', border: '1px solid rgba(0, 212, 255, 0.2)', borderRadius: '10px', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#00d4ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  💬 FORUM TOPICS ({forumTopics.length})
+                  💬 FORUM TOPICS ({forumTopics.length}) · {forumTopics.reduce((acc, t) => acc + (t.filesCount || 0), 0)} FILES TOTAL
                 </span>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {selectedTopicIds.size > 0 && (
@@ -575,7 +622,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                     color: activeTopicId === undefined ? '#0c0f17' : 'var(--text-main)', border: 'none'
                   }}
                 >
-                  🌐 All Messages
+                  🌐 All Messages ({forumTopics.reduce((acc, t) => acc + (t.filesCount || 0), 0)} files)
                 </button>
                 {forumTopics.map(t => (
                   <div key={t.id} style={{ display: 'flex', alignItems: 'center', background: activeTopicId === t.id ? '#00d4ff' : 'rgba(255,255,255,0.08)', borderRadius: '16px', paddingRight: '4px' }}>
@@ -599,13 +646,14 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
                     </div>
                     <button
                       onClick={() => handleGoInsideGroup(selectedChat, t.id)}
+                      title={`${t.videoCount || 0} videos, ${t.documentCount || 0} documents, ${t.photoCount || 0} photos`}
                       style={{
                         padding: '3px 6px 3px 0', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 600,
                         background: 'transparent',
                         color: activeTopicId === t.id ? '#0c0f17' : 'var(--text-main)', border: 'none'
                       }}
                     >
-                      💬 {t.title} {t.messagesCount ? `(${t.messagesCount})` : ''}
+                      💬 {t.title} {t.filesCount !== undefined ? `(${t.filesCount} files · ${t.messagesCount || 0} msgs)` : (t.messagesCount ? `(${t.messagesCount} msgs)` : '')}
                     </button>
                   </div>
                 ))}

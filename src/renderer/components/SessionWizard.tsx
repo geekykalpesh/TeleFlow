@@ -122,15 +122,32 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
     setScanning(true);
     setError(null);
 
-    const chosenTopic = selectedTopicId !== 'all' ? topics.find(t => String(t.id) === selectedTopicId) : undefined;
+    const parsedFrom = parseTelegramLink(fromMsgId);
+    const parsedTo = parseTelegramLink(toMsgId);
+
+    const effectiveFrom = parsedFrom.messageId ?? (fromMsgId ? parseInt(fromMsgId, 10) : undefined);
+    const effectiveTo = parsedTo.messageId ?? (toMsgId ? parseInt(toMsgId, 10) : undefined);
+
+    const chosenTopic = selectedTopicId !== 'all' ? topics.find(t => String(t.id) === selectedTopicId) : null;
+    let topicIdToUse = chosenTopic ? chosenTopic.id : undefined;
+    let topicTitleToUse = chosenTopic ? chosenTopic.title : undefined;
+
+    if (!topicIdToUse && (parsedFrom.topicId || parsedTo.topicId)) {
+      const tid = parsedFrom.topicId || parsedTo.topicId;
+      const matched = topics.find(t => t.id === tid);
+      if (matched) {
+        topicIdToUse = matched.id;
+        topicTitleToUse = matched.title;
+      }
+    }
 
     const options: ScanOptions = {
       chat_id: selectedChat.id,
       chat_title: selectedChat.title,
-      topic_id: chosenTopic ? chosenTopic.id : undefined,
-      topic_title: chosenTopic ? chosenTopic.title : undefined,
-      from_message_id: fromMsgId ? parseInt(fromMsgId, 10) : undefined,
-      to_message_id: toMsgId ? parseInt(toMsgId, 10) : undefined,
+      topic_id: topicIdToUse,
+      topic_title: topicTitleToUse,
+      from_message_id: effectiveFrom,
+      to_message_id: effectiveTo,
       media_types: mediaTypes,
       destination_path: destinationPath || undefined,
       download_mode: downloadMode,
@@ -159,6 +176,32 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
     }
   };
 
+  const handleFromMsgChange = (val: string) => {
+    setFromMsgId(val);
+    const parsed = parseTelegramLink(val);
+    if (parsed.chatId) {
+      const cleanTarget = parsed.chatId.replace(/^-100/, '');
+      const match = dialogs.find(d => d.id.replace(/^-100/, '') === cleanTarget || d.id === parsed.chatId || (d.username && d.username.toLowerCase() === parsed.chatId?.toLowerCase()));
+      if (match) setSelectedChat(match);
+    }
+    if (parsed.topicId) {
+      setSelectedTopicId(String(parsed.topicId));
+    }
+  };
+
+  const handleToMsgChange = (val: string) => {
+    setToMsgId(val);
+    const parsed = parseTelegramLink(val);
+    if (parsed.chatId && !selectedChat) {
+      const cleanTarget = parsed.chatId.replace(/^-100/, '');
+      const match = dialogs.find(d => d.id.replace(/^-100/, '') === cleanTarget || d.id === parsed.chatId || (d.username && d.username.toLowerCase() === parsed.chatId?.toLowerCase()));
+      if (match) setSelectedChat(match);
+    }
+    if (parsed.topicId && selectedTopicId === 'all') {
+      setSelectedTopicId(String(parsed.topicId));
+    }
+  };
+
   const parsedSearch = parseTelegramLink(searchQuery);
   const filteredDialogs = dialogs.filter((d) => {
     if (!searchQuery.trim()) return true;
@@ -176,6 +219,12 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
       d.id.includes(term)
     );
   });
+
+  const parsedFrom = parseTelegramLink(fromMsgId);
+  const parsedTo = parseTelegramLink(toMsgId);
+  const detectedTopicId = parsedFrom.topicId || parsedTo.topicId;
+  const detectedTopic = detectedTopicId ? topics.find(t => t.id === detectedTopicId) : undefined;
+  const totalTopicFiles = topics.reduce((acc, t) => acc + (t.filesCount || 0), 0);
 
   return (
     <div className="modal-overlay">
@@ -261,7 +310,7 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
           {selectedChat && topics.length > 0 && (
             <div style={{ marginBottom: '20px', padding: '12px 14px', background: 'rgba(0, 212, 255, 0.08)', border: '1px solid rgba(0, 212, 255, 0.25)', borderRadius: '8px' }}>
               <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#00d4ff', display: 'block', marginBottom: '8px' }}>
-                💬 FORUM GROUP TOPICS DETECTED ({topics.length} TOPICS)
+                💬 FORUM GROUP TOPICS DETECTED ({topics.length} TOPICS · {totalTopicFiles} FILES TOTAL)
               </label>
               <select
                 value={selectedTopicId}
@@ -269,48 +318,61 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ onClose, onCreated
                 className="input-field"
                 style={{ width: '100%', background: 'var(--bg-card)', color: '#fff', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px 12px', fontSize: '0.85rem' }}
               >
-                <option value="all">📂 Download All Topics (Auto Create Sub-Folders)</option>
+                <option value="all">📂 Download All Topics ({totalTopicFiles} files in {topics.length} separate topic sub-folders)</option>
                 {topics.map((t) => (
                   <option key={t.id} value={String(t.id)}>
-                    💬 {t.title} ({t.messagesCount || 0} messages)
+                    💬 {t.title} ({t.filesCount !== undefined ? `${t.filesCount} files · ` : ''}{t.messagesCount || 0} messages)
                   </option>
                 ))}
               </select>
               <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px' }}>
                 {selectedTopicId === 'all'
-                  ? 'All topics will be scanned and saved into separate subfolders inside the main group folder.'
-                  : 'Only messages from the selected topic thread will be downloaded into its topic folder.'}
+                  ? `All ${topics.length} topics (${totalTopicFiles} files) will be organized into individual subfolders inside "${selectedChat.title}".`
+                  : 'Only messages from the selected topic thread will be downloaded into its dedicated topic subfolder.'}
               </p>
             </div>
           )}
 
-          {/* Step 2: Message Range Filtering */}
+          {/* Step 2: Message Range / Telegram Links Filtering */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
-              2. MESSAGE RANGE (OPTIONAL)
+              2. MESSAGE RANGE / TELEGRAM LINKS (OPTIONAL)
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>From Message ID</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                  First Message Link or ID (Top Link)
+                </span>
                 <input
-                  type="number"
-                  placeholder="e.g. 100"
+                  type="text"
+                  placeholder="Paste top link e.g. https://t.me/c/.../73 or 73"
                   className="input-field"
                   value={fromMsgId}
-                  onChange={(e) => setFromMsgId(e.target.value)}
+                  onChange={(e) => handleFromMsgChange(e.target.value)}
                 />
               </div>
               <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>To Message ID</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                  Last Message Link or ID (Bottom Link)
+                </span>
                 <input
-                  type="number"
-                  placeholder="e.g. 500"
+                  type="text"
+                  placeholder="Paste last link e.g. https://t.me/c/.../154 or 154"
                   className="input-field"
                   value={toMsgId}
-                  onChange={(e) => setToMsgId(e.target.value)}
+                  onChange={(e) => handleToMsgChange(e.target.value)}
                 />
               </div>
             </div>
+
+            {(parsedFrom.messageId || parsedTo.messageId || detectedTopicId) && (
+              <div style={{ marginTop: '10px', padding: '8px 12px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '6px', fontSize: '0.76rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700 }}>✓ Auto-Detected:</span>
+                {parsedFrom.messageId && <span>First Msg: <strong style={{ color: '#fff' }}>#{parsedFrom.messageId}</strong></span>}
+                {parsedTo.messageId && <span>Last Msg: <strong style={{ color: '#fff' }}>#{parsedTo.messageId}</strong></span>}
+                {detectedTopic && <span style={{ color: '#00d4ff', fontWeight: 600 }}>Topic: "{detectedTopic.title}" ({detectedTopic.filesCount ?? 0} files)</span>}
+              </div>
+            )}
           </div>
 
           {/* Step 3: Destination Folder */}

@@ -28,31 +28,44 @@ export class ScannerService {
     const parsedFrom = parseTelegramLink(from_message_id);
     const parsedTo = parseTelegramLink(to_message_id);
 
-    const effectiveFromId = parsedFrom.messageId ?? (typeof from_message_id === 'number' ? from_message_id : (from_message_id ? parseInt(String(from_message_id), 10) : undefined));
-    const effectiveToId = parsedTo.messageId ?? (typeof to_message_id === 'number' ? to_message_id : (to_message_id ? parseInt(String(to_message_id), 10) : undefined));
+    let rawFromId = parsedFrom.messageId ?? (typeof from_message_id === 'number' ? from_message_id : (from_message_id ? parseInt(String(from_message_id), 10) : undefined));
+    let rawToId = parsedTo.messageId ?? (typeof to_message_id === 'number' ? to_message_id : (to_message_id ? parseInt(String(to_message_id), 10) : undefined));
+
+    if (isNaN(rawFromId as any)) rawFromId = undefined;
+    if (isNaN(rawToId as any)) rawToId = undefined;
+
+    let effectiveFromId = rawFromId;
+    let effectiveToId = rawToId;
+    if (effectiveFromId !== undefined && effectiveToId !== undefined && effectiveFromId > effectiveToId) {
+      const temp = effectiveFromId;
+      effectiveFromId = effectiveToId;
+      effectiveToId = temp;
+    }
+
     const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chat_id;
+    const rawTopic = topic_id ?? parsedFrom.topicId ?? parsedTo.topicId;
+    const effectiveTopicId = (rawTopic !== null && rawTopic !== undefined && !isNaN(Number(rawTopic))) ? Number(rawTopic) : undefined;
 
     let messages: any[] = [];
 
     if (options.selected_message_ids && options.selected_message_ids.length > 0) {
-      const chunkSize = 50; // 🔴 Reduced from 200 to 50 for safety
+      const chunkSize = 50; // Reduced for safety
       for (let i = 0; i < options.selected_message_ids.length; i += chunkSize) {
         const chunkIds = options.selected_message_ids.slice(i, i + chunkSize);
         const chunkMsgs = await telegramClient.getMessagesByIds(effectiveChatId, chunkIds);
         if (chunkMsgs && chunkMsgs.length > 0) {
           messages.push(...chunkMsgs);
         }
-        // 🔴 Human-like delay between chunk fetches
         if (i + chunkSize < options.selected_message_ids.length) {
           await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
         }
       }
     } else {
-      // Fetch ALL messages in channel / range / topic (replyTo = topic_id)
-      messages = await telegramClient.fetchMessages(effectiveChatId, effectiveFromId, effectiveToId, 0, topic_id);
+      // Fetch ALL messages in channel / range / topic (replyTo = effectiveTopicId)
+      messages = await telegramClient.fetchMessages(effectiveChatId, effectiveFromId, effectiveToId, 0, effectiveTopicId);
     }
     
-    console.log(`[DEBUG] fetchMessages returned ${messages.length} messages for topic_id: ${topic_id}`);
+    console.log(`[DEBUG] fetchMessages returned ${messages.length} messages for topic_id: ${effectiveTopicId}`);
 
     const deletedTombstones = dbService.getDeletedTombstones();
     const validMessages = messages.filter((msg: any) => msg && msg.id && !deletedTombstones.has(msg.id));
@@ -85,28 +98,31 @@ export class ScannerService {
       ? validMessages.filter((msg: any) => selectedSet.has(msg.id))
       : validMessages;
 
-    if (topic_id) {
-      console.log(`[DEBUG] Applying topic filter. topic_id=${topic_id} (type: ${typeof topic_id}), total messages before filter: ${filteredMessages.length}`);
+    if (effectiveTopicId) {
+      console.log(`[DEBUG] Applying topic filter. topic_id=${effectiveTopicId} (type: ${typeof effectiveTopicId}), total messages before filter: ${filteredMessages.length}`);
       filteredMessages = filteredMessages.filter((msg: any) => {
         const replyToObj = msg.replyTo;
         const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId;
         
         if (msgTopicId !== undefined && msgTopicId !== null) {
-          if (msgTopicId == topic_id) return true; // Used loose equality just in case of BigInt vs Number vs String
+          if (msgTopicId == effectiveTopicId) return true; // Used loose equality just in case of BigInt vs Number vs String
           return false;
         }
         
         // If message has no replyTo, it belongs to General topic (which is topic 1 in Telegram).
         const isForumTopicReply = replyToObj?.forumTopic;
-        if (msg.id == topic_id) return true; // The topic creation message itself
-        if (topic_id == 1 && (!msgTopicId || msgTopicId === null) && !isForumTopicReply) return true;
+        if (msg.id == effectiveTopicId) return true; // The topic creation message itself
+        if (effectiveTopicId == 1 && (!msgTopicId || msgTopicId === null) && !isForumTopicReply) return true;
         
         return false;
       });
       console.log(`[DEBUG] After filter: ${filteredMessages.length} messages remaining.`);
     } else {
-      console.log(`[DEBUG] NOT applying filter. topic_id=${topic_id}`);
+      console.log(`[DEBUG] NOT applying filter. topic_id=${effectiveTopicId}`);
     }
+
+    // Pre-fetch completed message IDs from SQLite DB to eliminate duplicate downloading
+    const completedMessageIds = dbService.getCompletedMessageIds(effectiveChatId);
 
     filteredMessages.forEach((msg: any) => {
       const mediaInfo = this.extractMediaDetails(msg);
@@ -155,7 +171,7 @@ export class ScannerService {
 
       // Determine topic ID and title for this specific message
       const replyToObj = msg.replyTo;
-      const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId || topic_id;
+      const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId || effectiveTopicId;
       let msgTopicTitle = topic_title;
 
       if (!msgTopicTitle && msgTopicId && topicMap.has(msgTopicId)) {
@@ -179,10 +195,33 @@ export class ScannerService {
       const tempPath = path.join(itemFolder, '.temp', `${sessionId}_${msg.id}.part`);
       
       const primaryTitle = isMediaMessage ? mediaInfo.filename : `${this.generateTextTitle(textInfo.fullText, msg.id)}.txt`;
-      const finalFileName = `${formattedSeq}_${this.sanitizeFilename(primaryTitle)}`;
+      const cleanPrimary = this.sanitizeFilename(primaryTitle);
+      const finalFileName = `${formattedSeq}_${cleanPrimary}`;
       const finalPath = path.join(itemFolder, finalFileName);
 
-      const shouldSkipPrimary = options.skip_existing_files && (fs.existsSync(finalPath) || fs.existsSync(tempPath));
+      // Check A: Database completed check to prevent duplicate downloading
+      const isAlreadyCompletedInDb = options.skip_existing_files !== false && completedMessageIds.has(msg.id);
+
+      // Check B: Filesystem check in target topic folder to prevent duplicate downloading
+      let alreadyExistsOnDisk = false;
+      if (options.skip_existing_files !== false && fs.existsSync(itemFolder)) {
+        if (fs.existsSync(finalPath)) {
+          alreadyExistsOnDisk = true;
+        } else {
+          try {
+            const files = fs.readdirSync(itemFolder);
+            const match = files.find(f => f === cleanPrimary || f.endsWith(`_${cleanPrimary}`));
+            if (match) {
+              const stat = fs.statSync(path.join(itemFolder, match));
+              if (stat.size > 0 && (!mediaInfo.size || Math.abs(stat.size - mediaInfo.size) < 4096)) {
+                alreadyExistsOnDisk = true;
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      const shouldSkipPrimary = options.skip_existing_files && (isAlreadyCompletedInDb || alreadyExistsOnDisk || fs.existsSync(tempPath));
 
       if (!shouldSkipPrimary) {
         downloadItems.push({
@@ -211,8 +250,9 @@ export class ScannerService {
         });
       }
 
-      // 2. If message HAS binary media AND ALSO HAS text/resources, save post text/resources in sequence!
-      const shouldSavePostText = options.save_post_text !== false;
+      // 2. Only save separate info text if requested
+      const wantsText = options.media_types ? options.media_types.includes('text') : false;
+      const shouldSavePostText = options.save_post_text === true || (options.save_post_text !== false && wantsText);
       if (isMediaMessage && textInfo.hasContent && shouldSavePostText) {
         seqNumber = (topicSeqCounters.get(topicKey) || 0) + 1;
         topicSeqCounters.set(topicKey, seqNumber);
@@ -222,7 +262,7 @@ export class ScannerService {
         const textFinalFileName = `${textFormattedSeq}_${textBaseName}`;
         const textFinalPath = path.join(itemFolder, textFinalFileName);
 
-        const shouldSkipText = options.skip_existing_files && fs.existsSync(textFinalPath);
+        const shouldSkipText = options.skip_existing_files && (isAlreadyCompletedInDb || fs.existsSync(textFinalPath));
 
         if (!shouldSkipText) {
           const textBytes = Buffer.byteLength(textInfo.fullText, 'utf-8');
@@ -259,11 +299,11 @@ export class ScannerService {
       title: session_title,
       chat_id: effectiveChatId,
       chat_title,
-      is_forum: !!topic_id,
-      topic_id: topic_id,
+      is_forum: !!effectiveTopicId,
+      topic_id: effectiveTopicId,
       topic_title: topic_title,
-      from_message_id,
-      to_message_id,
+      from_message_id: effectiveFromId,
+      to_message_id: effectiveToId,
       destination_path: path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title)),
       add_sequence_prefix: true,
       sequence_padding: 3,
@@ -296,8 +336,12 @@ export class ScannerService {
       topics = topics.filter(t => targetIds.has(t.id));
     }
 
+    // Filter out topics with 0 files if filesCount is available and there are topics with files
+    const topicsWithFiles = topics.filter(t => (t.filesCount !== undefined ? t.filesCount > 0 : true));
+    const targetTopics = topicsWithFiles.length > 0 ? topicsWithFiles : topics;
+
     const sessions: DownloadSession[] = [];
-    for (const topic of topics) {
+    for (const topic of targetTopics) {
       try {
         const topicSession = await this.scanAndEnqueue({
           ...options,
@@ -305,7 +349,9 @@ export class ScannerService {
           topic_title: topic.title,
           session_title: `${options.chat_title} - ${topic.title}`
         });
-        sessions.push(topicSession);
+        if (topicSession.total_files > 0) {
+          sessions.push(topicSession);
+        }
       } catch (err) {
         console.warn(`[ScannerService] Failed to scan topic "${topic.title}":`, err);
       }

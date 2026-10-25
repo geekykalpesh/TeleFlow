@@ -89,6 +89,10 @@ class DbService {
     } catch (e) {}
 
     try {
+      this.db.run(`ALTER TABLE sessions ADD COLUMN topic_title TEXT`);
+    } catch (e) {}
+
+    try {
       this.db.run(`ALTER TABLE sessions ADD COLUMN is_forum INTEGER DEFAULT 0`);
     } catch (e) {}
 
@@ -191,13 +195,14 @@ class DbService {
     if (!this.db) return;
     const stmt = this.db.prepare(`
       INSERT INTO sessions (
-        id, title, chat_id, chat_title, from_message_id, to_message_id,
+        id, title, chat_id, chat_title, topic_id, topic_title, is_forum, from_message_id, to_message_id,
         destination_path, add_sequence_prefix, sequence_padding,
         download_mode, concurrency, created_at, status, download_enabled, sync_enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run([
       session.id, session.title, session.chat_id, session.chat_title,
+      session.topic_id || null, session.topic_title || null, session.is_forum ? 1 : 0,
       session.from_message_id || null, session.to_message_id || null,
       session.destination_path, session.add_sequence_prefix ? 1 : 0,
       session.sequence_padding, session.download_mode, session.concurrency,
@@ -211,7 +216,7 @@ class DbService {
 
   public getSessions(): DownloadSession[] {
     if (!this.db) return [];
-    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, topic_id, is_forum, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions ORDER BY created_at DESC`);
+    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, topic_id, topic_title, is_forum, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions ORDER BY created_at DESC`);
     if (!res.length) return [];
     
     const rows = res[0].values;
@@ -224,18 +229,19 @@ class DbService {
         chat_id: row[2],
         chat_title: row[3],
         topic_id: row[4] ? Number(row[4]) : undefined,
-        is_forum: Boolean(row[5]),
-        from_message_id: row[6],
-        to_message_id: row[7],
-        destination_path: row[8],
-        add_sequence_prefix: Boolean(row[9]),
-        sequence_padding: row[10],
-        download_mode: row[11],
-        concurrency: row[12],
-        created_at: row[13],
-        status: row[14],
-        download_enabled: row[15] === undefined || row[15] === null ? true : Boolean(row[15]),
-        sync_enabled: row[16] === undefined || row[16] === null ? true : Boolean(row[16]),
+        topic_title: row[5] ? String(row[5]) : undefined,
+        is_forum: Boolean(row[6]),
+        from_message_id: row[7],
+        to_message_id: row[8],
+        destination_path: row[9],
+        add_sequence_prefix: Boolean(row[10]),
+        sequence_padding: row[11],
+        download_mode: row[12],
+        concurrency: row[13],
+        created_at: row[14],
+        status: row[15],
+        download_enabled: row[16] === undefined || row[16] === null ? true : Boolean(row[16]),
+        sync_enabled: row[17] === undefined || row[17] === null ? true : Boolean(row[17]),
         total_files: stats.total_files,
         completed_files: stats.completed_files,
         total_bytes: stats.total_bytes,
@@ -247,7 +253,7 @@ class DbService {
   public getSessionById(sessionId: string): DownloadSession | null {
     if (!this.db) return null;
     const cleanId = sessionId.replace(/'/g, "''");
-    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, topic_id, is_forum, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions WHERE id = '${cleanId}'`);
+    const res = this.db.exec(`SELECT id, title, chat_id, chat_title, topic_id, topic_title, is_forum, from_message_id, to_message_id, destination_path, add_sequence_prefix, sequence_padding, download_mode, concurrency, created_at, status, download_enabled, sync_enabled FROM sessions WHERE id = '${cleanId}'`);
     if (!res.length || !res[0].values.length) return null;
     const row = res[0].values[0];
     const stats = this.getSessionStats(sessionId);
@@ -257,25 +263,25 @@ class DbService {
       chat_id: row[2] as string,
       chat_title: row[3] as string,
       topic_id: row[4] ? Number(row[4]) : undefined,
-      is_forum: Boolean(row[5]),
-      from_message_id: row[6] as number,
-      to_message_id: row[7] as number,
-      destination_path: row[8] as string,
-      add_sequence_prefix: Boolean(row[9]),
-      sequence_padding: row[10] as number,
-      download_mode: row[11] as any,
-      concurrency: row[12] as number,
-      created_at: row[13] as string,
-      status: row[14] as any,
-      download_enabled: row[15] === undefined || row[15] === null ? true : Boolean(row[15]),
-      sync_enabled: row[16] === undefined || row[16] === null ? true : Boolean(row[16]),
+      topic_title: row[5] ? String(row[5]) : undefined,
+      is_forum: Boolean(row[6]),
+      from_message_id: row[7] as number,
+      to_message_id: row[8] as number,
+      destination_path: row[9] as string,
+      add_sequence_prefix: Boolean(row[10]),
+      sequence_padding: row[11] as number,
+      download_mode: row[12] as any,
+      concurrency: row[13] as number,
+      created_at: row[14] as string,
+      status: row[15] as any,
+      download_enabled: row[16] === undefined || row[16] === null ? true : Boolean(row[16]),
+      sync_enabled: row[17] === undefined || row[17] === null ? true : Boolean(row[17]),
       total_files: stats.total_files,
       completed_files: stats.completed_files,
       total_bytes: stats.total_bytes,
       downloaded_bytes: stats.downloaded_bytes
     };
   }
-
 
   private getSessionStats(sessionId: string) {
     if (!this.db) return { total_files: 0, completed_files: 0, total_bytes: 0, downloaded_bytes: 0 };
@@ -299,7 +305,7 @@ class DbService {
 
   // Items CRUD
   public addDownloadItems(items: DownloadItem[]): void {
-    if (!this.db) return;
+    if (!this.db || !items || items.length === 0) return;
     const stmt = this.db.prepare(`
       INSERT INTO download_items (
         id, session_id, chat_id, chat_title, message_id, sequence_number,
@@ -310,6 +316,13 @@ class DbService {
     `);
 
     for (const item of items) {
+      // Avoid inserting exact duplicate ID if already in DB
+      const cleanId = item.id.replace(/'/g, "''");
+      const exists = this.db.exec(`SELECT id FROM download_items WHERE id = '${cleanId}'`);
+      if (exists.length && exists[0].values.length) {
+        continue;
+      }
+
       stmt.run([
         item.id, item.session_id, item.chat_id, item.chat_title, item.message_id,
         item.sequence_number, item.formatted_sequence, item.media_type,
@@ -322,6 +335,22 @@ class DbService {
     }
     stmt.free();
     this.save();
+  }
+
+  public getCompletedMessageIds(chatId: string): Set<number> {
+    if (!this.db) return new Set();
+    const cleanChatId = chatId.replace(/'/g, "''");
+    const res = this.db.exec(`SELECT DISTINCT message_id FROM download_items WHERE chat_id = '${cleanChatId}' AND status = 'COMPLETED'`);
+    if (!res.length) return new Set();
+    return new Set(res[0].values.map((r: any[]) => Number(r[0])));
+  }
+
+  public getQueuedOrCompletedMessageIds(chatId: string): Set<number> {
+    if (!this.db) return new Set();
+    const cleanChatId = chatId.replace(/'/g, "''");
+    const res = this.db.exec(`SELECT DISTINCT message_id FROM download_items WHERE chat_id = '${cleanChatId}' AND status IN ('QUEUED', 'DOWNLOADING', 'COMPLETED')`);
+    if (!res.length) return new Set();
+    return new Set(res[0].values.map((r: any[]) => Number(r[0])));
   }
 
   public getDownloadItems(sessionId?: string): DownloadItem[] {

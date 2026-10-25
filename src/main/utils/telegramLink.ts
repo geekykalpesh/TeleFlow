@@ -15,10 +15,12 @@ export interface ParsedTelegramLink {
  */
 export function parseTelegramLink(input: string | number | undefined | null): ParsedTelegramLink {
   if (!input) return { chatId: null, messageId: null, topicId: null };
-  const str = String(input).trim();
+  let str = String(input).trim();
+  // Strip query string and hashes
+  str = str.split('?')[0].split('#')[0].replace(/\/+$/, '');
 
-  // Pattern 1: Private channel post link with topic e.g. https://t.me/c/2586510339/3578/3580
-  const privateTopicMatch = str.match(/t\.me\/c\/(\d+)\/(\d+)\/(\d+)/i);
+  // Pattern 1: Private channel post link with topic e.g. https://t.me/c/2586510339/3578/3580 or telegram.me/c/...
+  const privateTopicMatch = str.match(/(?:t\.me|telegram\.me)\/c\/(\d+)\/(\d+)\/(\d+)/i);
   if (privateTopicMatch) {
     const rawId = privateTopicMatch[1];
     const topicId = parseInt(privateTopicMatch[2], 10);
@@ -27,8 +29,8 @@ export function parseTelegramLink(input: string | number | undefined | null): Pa
     return { chatId, topicId, messageId };
   }
 
-  // Pattern 2: Private channel post link e.g. https://t.me/c/3429930878/642 or t.me/c/3429930878/642
-  const privateMatch = str.match(/t\.me\/c\/(\d+)\/(\d+)/i);
+  // Pattern 2: Private channel post link e.g. https://t.me/c/3429930878/642
+  const privateMatch = str.match(/(?:t\.me|telegram\.me)\/c\/(\d+)\/(\d+)/i);
   if (privateMatch) {
     const rawId = privateMatch[1];
     const messageId = parseInt(privateMatch[2], 10);
@@ -37,7 +39,7 @@ export function parseTelegramLink(input: string | number | undefined | null): Pa
   }
 
   // Pattern 3: Private channel base link e.g. https://t.me/c/3429930878
-  const privateBaseMatch = str.match(/t\.me\/c\/(\d+)/i);
+  const privateBaseMatch = str.match(/(?:t\.me|telegram\.me)\/c\/(\d+)/i);
   if (privateBaseMatch) {
     const rawId = privateBaseMatch[1];
     const chatId = rawId.startsWith('-100') ? rawId : `-100${rawId}`;
@@ -45,7 +47,7 @@ export function parseTelegramLink(input: string | number | undefined | null): Pa
   }
 
   // Pattern 4: Public channel post link with topic e.g. https://t.me/channel_username/3578/3580
-  const publicTopicMatch = str.match(/t\.me\/([a-zA-Z0-9_]+)\/(\d+)\/(\d+)/i);
+  const publicTopicMatch = str.match(/(?:t\.me|telegram\.me)\/([a-zA-Z0-9_]+)\/(\d+)\/(\d+)/i);
   if (publicTopicMatch) {
     return {
       chatId: publicTopicMatch[1],
@@ -54,8 +56,8 @@ export function parseTelegramLink(input: string | number | undefined | null): Pa
     };
   }
 
-  // Pattern 5: Public channel post link e.g. https://t.me/channel_username/642 or t.me/channel_username/642
-  const publicMatch = str.match(/t\.me\/([a-zA-Z0-9_]+)\/(\d+)/i);
+  // Pattern 5: Public channel post link e.g. https://t.me/channel_username/642
+  const publicMatch = str.match(/(?:t\.me|telegram\.me)\/([a-zA-Z0-9_]+)\/(\d+)/i);
   if (publicMatch) {
     const chatId = publicMatch[1];
     const messageId = parseInt(publicMatch[2], 10);
@@ -63,7 +65,7 @@ export function parseTelegramLink(input: string | number | undefined | null): Pa
   }
 
   // Pattern 6: Public channel link e.g. https://t.me/channel_username or @channel_username
-  const handleMatch = str.match(/(?:t\.me\/|@)([a-zA-Z0-9_]+)/i);
+  const handleMatch = str.match(/(?:(?:t\.me|telegram\.me)\/|@)([a-zA-Z0-9_]+)/i);
   if (handleMatch) {
     return { chatId: handleMatch[1], messageId: null, topicId: null };
   }

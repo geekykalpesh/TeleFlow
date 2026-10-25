@@ -400,13 +400,64 @@ class TelegramClientService {
 
       if (!res || !res.topics) return [];
 
-      const topics = res.topics.map((t: any) => ({
-        id: t.id,
-        title: t.title || `Topic #${t.id}`,
-        iconColor: t.iconColor,
-        iconEmojiId: t.iconEmojiId ? t.iconEmojiId.toString() : undefined,
-        topMessageId: t.topMessage,
-        messagesCount: t.totalMessages
+      const rawTopics = [...res.topics];
+
+      // Enrich each topic with exact message count and media files count in parallel
+      const topics: TelegramForumTopic[] = await Promise.all(rawTopics.map(async (t: any) => {
+        let msgsCount = 0;
+        let dCount = 0;
+        let vCount = 0;
+        let pCount = 0;
+
+        try {
+          const [rep, doc, vid, photo] = await Promise.all([
+            this.client!.invoke(new Api.messages.GetReplies({
+              peer: entity, msgId: t.id, offsetId: 0, offsetDate: 0, addOffset: 0, limit: 1, maxId: 0, minId: 0,
+              hash: bigInt.zero
+            })).catch(() => ({ count: 0 })),
+            this.client!.invoke(new Api.messages.Search({
+              peer: entity, q: '', filter: new Api.InputMessagesFilterDocument(), topMsgId: t.id,
+              minDate: 0, maxDate: 0, offsetId: 0, addOffset: 0, limit: 1, maxId: 0, minId: 0, hash: bigInt.zero
+            })).catch(() => ({ count: 0 })),
+            this.client!.invoke(new Api.messages.Search({
+              peer: entity, q: '', filter: new Api.InputMessagesFilterVideo(), topMsgId: t.id,
+              minDate: 0, maxDate: 0, offsetId: 0, addOffset: 0, limit: 1, maxId: 0, minId: 0, hash: bigInt.zero
+            })).catch(() => ({ count: 0 })),
+            this.client!.invoke(new Api.messages.Search({
+              peer: entity, q: '', filter: new Api.InputMessagesFilterPhotos(), topMsgId: t.id,
+              minDate: 0, maxDate: 0, offsetId: 0, addOffset: 0, limit: 1, maxId: 0, minId: 0, hash: bigInt.zero
+            })).catch(() => ({ count: 0 }))
+          ]);
+
+          dCount = (doc as any)?.count || 0;
+          vCount = (vid as any)?.count || 0;
+          pCount = (photo as any)?.count || 0;
+          const totalFiles = dCount + vCount + pCount;
+          msgsCount = (rep as any)?.count || (totalFiles > 0 ? totalFiles : 0);
+
+          return {
+            id: t.id,
+            title: t.title || `Topic #${t.id}`,
+            iconColor: t.iconColor,
+            iconEmojiId: t.iconEmojiId ? t.iconEmojiId.toString() : undefined,
+            topMessageId: t.topMessage,
+            messagesCount: msgsCount,
+            filesCount: totalFiles,
+            videoCount: vCount,
+            documentCount: dCount,
+            photoCount: pCount
+          };
+        } catch (e) {
+          return {
+            id: t.id,
+            title: t.title || `Topic #${t.id}`,
+            iconColor: t.iconColor,
+            iconEmojiId: t.iconEmojiId ? t.iconEmojiId.toString() : undefined,
+            topMessageId: t.topMessage,
+            messagesCount: 0,
+            filesCount: 0
+          };
+        }
       }));
       
       this.forumTopicsCache.set(chatId, topics);
@@ -426,21 +477,40 @@ class TelegramClientService {
   public async inspectGroupMessages(
     chatId: string,
     limit: number = 100,
-    fromMsgId?: number,
-    toMsgId?: number,
+    fromMsgId?: number | string,
+    toMsgId?: number | string,
     offsetId?: number,
     replyTo?: number
   ): Promise<{ items: GroupMessageItem[]; hasMore: boolean; oldestMsgId: number | null }> {
     if (!this.client) throw new Error('Telegram client is not connected.');
 
-    const entity = await this.resolveEntity(chatId);
+    const parsedFrom = parseTelegramLink(fromMsgId);
+    const parsedTo = parseTelegramLink(toMsgId);
 
-    const effectiveMaxId = offsetId ?? (toMsgId ? toMsgId + 1 : undefined);
-    const effectiveMinId = fromMsgId ? fromMsgId - 1 : undefined;
+    let rawFrom = parsedFrom.messageId ?? (typeof fromMsgId === 'number' ? fromMsgId : (fromMsgId ? parseInt(String(fromMsgId), 10) : undefined));
+    let rawTo = parsedTo.messageId ?? (typeof toMsgId === 'number' ? toMsgId : (toMsgId ? parseInt(String(toMsgId), 10) : undefined));
+
+    if (isNaN(rawFrom as any)) rawFrom = undefined;
+    if (isNaN(rawTo as any)) rawTo = undefined;
+
+    let minId = rawFrom;
+    let maxId = rawTo;
+    if (minId !== undefined && maxId !== undefined && minId > maxId) {
+      const temp = minId;
+      minId = maxId;
+      maxId = temp;
+    }
+
+    const effectiveReplyTo = replyTo ?? parsedFrom.topicId ?? parsedTo.topicId;
+    const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chatId;
+    const entity = await this.resolveEntity(effectiveChatId);
+
+    const effectiveMaxId = offsetId ?? (maxId ? maxId + 1 : undefined);
+    const effectiveMinId = minId ? minId - 1 : undefined;
 
     const messages = await this.client.getMessages(entity, {
       limit,
-      replyTo: replyTo || undefined,
+      replyTo: effectiveReplyTo || undefined,
       minId: effectiveMinId,
       maxId: effectiveMaxId
     });
@@ -563,30 +633,50 @@ class TelegramClientService {
     return this.client.getMessages(entity, { ids });
   }
 
-  public async fetchMessages(chatId: string, fromId?: number, toId?: number, limit: number = 0, replyTo?: number) {
+  public async fetchMessages(chatId: string, fromId?: number | string, toId?: number | string, limit: number = 0, replyTo?: number) {
     if (!this.client) throw new Error('Telegram client is not connected.');
-    const entity = await this.resolveEntity(chatId);
+
+    const parsedFrom = parseTelegramLink(fromId);
+    const parsedTo = parseTelegramLink(toId);
+
+    let rawFrom = parsedFrom.messageId ?? (typeof fromId === 'number' ? fromId : (fromId ? parseInt(String(fromId), 10) : undefined));
+    let rawTo = parsedTo.messageId ?? (typeof toId === 'number' ? toId : (toId ? parseInt(String(toId), 10) : undefined));
+
+    if (isNaN(rawFrom as any)) rawFrom = undefined;
+    if (isNaN(rawTo as any)) rawTo = undefined;
+
+    let minId = rawFrom;
+    let maxId = rawTo;
+    if (minId !== undefined && maxId !== undefined && minId > maxId) {
+      const temp = minId;
+      minId = maxId;
+      maxId = temp;
+    }
+
+    const effectiveReplyTo = replyTo ?? parsedFrom.topicId ?? parsedTo.topicId;
+    const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chatId;
+    const entity = await this.resolveEntity(effectiveChatId);
 
     // Single batch fetch for explicit small preview limits
     if (limit > 0 && limit <= 500) {
       return this.client.getMessages(entity, {
         limit,
-        replyTo: replyTo || undefined,
-        minId: fromId ? fromId - 1 : undefined,
-        maxId: toId ? toId + 1 : undefined
+        replyTo: effectiveReplyTo || undefined,
+        minId: minId ? minId - 1 : undefined,
+        maxId: maxId ? maxId + 1 : undefined
       });
     }
 
     // Full channel / range history fetch (limit === 0)
     const allMessages: any[] = [];
-    let currentOffsetId: number | undefined = toId ? toId + 1 : undefined;
-    const minId = fromId ? fromId - 1 : undefined;
+    let currentOffsetId: number | undefined = maxId ? maxId + 1 : undefined;
+    const effectiveMinId = minId ? minId - 1 : undefined;
 
     while (true) {
       const batch = await this.client.getMessages(entity, {
         limit: 100,
-        replyTo: replyTo || undefined,
-        minId: minId,
+        replyTo: effectiveReplyTo || undefined,
+        minId: effectiveMinId,
         maxId: currentOffsetId
       });
 
@@ -596,13 +686,13 @@ class TelegramClientService {
 
       const oldestInBatch = Math.min(...batch.map((m: any) => m.id));
 
-      if (minId && oldestInBatch <= minId) break;
+      if (effectiveMinId && oldestInBatch <= effectiveMinId) break;
       if (batch.length < 100) break;
 
       currentOffsetId = oldestInBatch;
       
-      // 🔴 Human-like delay (1.5s to 3s) to prevent FLOOD_WAIT and anti-spam detection
-      await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500));
+      // Delay to avoid flood limits
+      await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 600));
     }
 
     return allMessages;
