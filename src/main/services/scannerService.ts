@@ -301,6 +301,10 @@ export class ScannerService {
       }
     });
 
+    const sessionDestination = topic_title
+      ? path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title), this.sanitizeFolderName(topic_title))
+      : path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title));
+
     const session: DownloadSession = {
       id: sessionId,
       title: session_title,
@@ -311,7 +315,7 @@ export class ScannerService {
       topic_title: topic_title,
       from_message_id: effectiveFromId,
       to_message_id: effectiveToId,
-      destination_path: path.join(baseDownloadsDir, this.sanitizeFolderName(chat_title)),
+      destination_path: sessionDestination,
       add_sequence_prefix: true,
       sequence_padding: 3,
       download_mode,
@@ -527,6 +531,13 @@ export class ScannerService {
     const session = dbService.getSessionById(sessionId);
     if (!session) throw new Error('Session not found');
 
+    // Robustly infer topic_id and topic_title if missing from session
+    const effectiveTopicId = session.topic_id ?? (session.id.match(/_(\d+)$/)?.[1] ? Number(session.id.match(/_(\d+)$/)?.[1]) : undefined);
+    let topicTitle = session.topic_title;
+    if (!topicTitle && session.title && session.title.includes(' - ')) {
+      topicTitle = session.title.split(' - ').slice(1).join(' - ').trim();
+    }
+
     const existingItems = dbService.getDownloadItems(sessionId);
     const deletedTombstones = dbService.getDeletedTombstones(sessionId);
     const existingMsgIds = new Set(existingItems.map(i => i.message_id));
@@ -547,24 +558,23 @@ export class ScannerService {
       maxMessageId > 0 ? maxMessageId : undefined,
       undefined,
       0,
-      session.topic_id
+      effectiveTopicId
     );
 
     let validNewMessages = newMessages.filter((msg: any) => msg && msg.id && msg.id > maxMessageId && !existingMsgIds.has(msg.id) && !deletedTombstones.has(msg.id));
     
-    if (session.topic_id) {
+    if (effectiveTopicId) {
       validNewMessages = validNewMessages.filter((msg: any) => {
         const replyToObj = msg.replyTo;
         const msgTopicId = replyToObj?.replyToTopId || replyToObj?.replyToMsgId;
         
         if (msgTopicId !== undefined && msgTopicId !== null) {
-          if (msgTopicId == session.topic_id) return true;
-          return false;
+          return Number(msgTopicId) === Number(effectiveTopicId);
         }
         
         const isForumTopicReply = replyToObj?.forumTopic;
-        if (msg.id == session.topic_id) return true;
-        if (session.topic_id == 1 && (!msgTopicId || msgTopicId === null) && !isForumTopicReply) return true;
+        if (msg.id === effectiveTopicId) return true;
+        if (effectiveTopicId === 1 && (!msgTopicId || msgTopicId === null) && !isForumTopicReply) return true;
         
         return false;
       });
@@ -576,7 +586,10 @@ export class ScannerService {
 
     validNewMessages.sort((a: any, b: any) => a.id - b.id);
 
-    const defaultBaseDir = session.destination_path;
+    let defaultBaseDir = session.destination_path;
+    if (topicTitle && !defaultBaseDir.toLowerCase().includes(topicTitle.toLowerCase())) {
+      defaultBaseDir = path.join(defaultBaseDir, this.sanitizeFolderName(topicTitle));
+    }
     const tempDir = path.join(defaultBaseDir, '.temp');
     const padding = Math.max(session.sequence_padding || 3, String(maxSeqNumber + validNewMessages.length).length);
     const newItems: DownloadItem[] = [];

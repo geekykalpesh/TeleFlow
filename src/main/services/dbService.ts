@@ -50,6 +50,7 @@ class DbService {
     this.createTables();
     this.repairDuplicateSequenceNumbers();
     this.repairCorruptedItemPaths();
+    this.repairForumTopicSessionsAndItems();
     this.save();
   }
 
@@ -193,6 +194,17 @@ class DbService {
   // Sessions CRUD
   public createSession(session: DownloadSession): void {
     if (!this.db) return;
+
+    // Auto-infer topic_id and topic_title if missing from session object
+    const inferredTopicId = session.topic_id ?? (session.id.match(/_(\d+)$/)?.[1] ? Number(session.id.match(/_(\d+)$/)?.[1]) : undefined);
+    const finalTopicId = inferredTopicId ?? null;
+    const isForum = session.is_forum || !!inferredTopicId;
+
+    let topicTitle = session.topic_title || null;
+    if (!topicTitle && session.title && session.title.includes(' - ')) {
+      topicTitle = session.title.split(' - ').slice(1).join(' - ').trim();
+    }
+
     const stmt = this.db.prepare(`
       INSERT INTO sessions (
         id, title, chat_id, chat_title, topic_id, topic_title, is_forum, from_message_id, to_message_id,
@@ -202,7 +214,7 @@ class DbService {
     `);
     stmt.run([
       session.id, session.title, session.chat_id, session.chat_title,
-      session.topic_id || null, session.topic_title || null, session.is_forum ? 1 : 0,
+      finalTopicId, topicTitle, isForum ? 1 : 0,
       session.from_message_id || null, session.to_message_id || null,
       session.destination_path, session.add_sequence_prefix ? 1 : 0,
       session.sequence_padding, session.download_mode, session.concurrency,
@@ -749,6 +761,67 @@ class DbService {
       }
     } catch (e) {
       console.warn('[DbService] Auto-repair corrupted paths warning:', e);
+    }
+  }
+
+  public repairForumTopicSessionsAndItems(): void {
+    if (!this.db) return;
+    try {
+      // 1. Recover topic_id and topic_title for sessions where topic_id is missing but session id ends in _<topicId>
+      const sessionsRes = this.db.exec("SELECT id, title, destination_path FROM sessions WHERE topic_id IS NULL OR topic_id = 0");
+      if (sessionsRes.length > 0 && sessionsRes[0].values.length > 0) {
+        for (const row of sessionsRes[0].values) {
+          const sId = String(row[0]);
+          const sTitle = String(row[1]);
+          const sDest = String(row[2]);
+
+          const match = sId.match(/_(\d+)$/);
+          if (match) {
+            const topicId = parseInt(match[1], 10);
+            let topicTitle = '';
+            if (sTitle.includes(' - ')) {
+              topicTitle = sTitle.split(' - ').slice(1).join(' - ').trim();
+            }
+
+            const cleanId = sId.replace(/'/g, "''");
+            const cleanTitle = topicTitle.replace(/'/g, "''");
+            this.db.run(`UPDATE sessions SET topic_id = ${topicId}, is_forum = 1, topic_title = '${cleanTitle}' WHERE id = '${cleanId}'`);
+
+            if (topicTitle && !sDest.toLowerCase().includes(topicTitle.toLowerCase())) {
+              const newDest = path.join(sDest, topicTitle).replace(/'/g, "''");
+              this.db.run(`UPDATE sessions SET destination_path = '${newDest}' WHERE id = '${cleanId}'`);
+            }
+          }
+        }
+      }
+
+      // 2. Remove rogue cross-topic items added by previous sync bug
+      const topicSessions = this.db.exec("SELECT id, topic_id, topic_title FROM sessions WHERE is_forum = 1 AND topic_id IS NOT NULL");
+      if (topicSessions.length > 0 && topicSessions[0].values.length > 0) {
+        for (const row of topicSessions[0].values) {
+          const sId = String(row[0]).replace(/'/g, "''");
+          const topicId = Number(row[1]);
+          const topicTitle = row[2] ? String(row[2]).replace(/'/g, "''") : '';
+
+          if (topicTitle && topicTitle !== 'General') {
+            this.db.run(`
+              DELETE FROM download_items 
+              WHERE session_id = '${sId}' 
+              AND final_path NOT LIKE '%\\${topicTitle}\\%'
+              AND final_path NOT LIKE '%/${topicTitle}/%'
+            `);
+          } else if (topicId === 1 || topicTitle === 'General') {
+            this.db.run(`
+              DELETE FROM download_items 
+              WHERE session_id = '${sId}' 
+              AND message_id > 1
+            `);
+          }
+        }
+      }
+      this.save();
+    } catch (e) {
+      console.warn('[DbService] Error in repairForumTopicSessionsAndItems:', e);
     }
   }
 
