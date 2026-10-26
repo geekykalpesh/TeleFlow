@@ -43,13 +43,11 @@ export class ScannerService {
     }
 
     const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chat_id;
-    const rawTopic = topic_id ?? parsedFrom.topicId ?? parsedTo.topicId;
+    const rawTopic = parsedFrom.topicId ?? parsedTo.topicId ?? topic_id;
     const effectiveTopicId = (rawTopic !== null && rawTopic !== undefined && !isNaN(Number(rawTopic))) ? Number(rawTopic) : undefined;
 
-    if (parsedFrom.topicId && effectiveTopicId && parsedFrom.topicId !== effectiveTopicId) {
+    if (parsedFrom.topicId && parsedTo.topicId && parsedFrom.topicId !== parsedTo.topicId) {
       effectiveFromId = undefined;
-    }
-    if (parsedTo.topicId && effectiveTopicId && parsedTo.topicId !== effectiveTopicId) {
       effectiveToId = undefined;
     }
 
@@ -74,8 +72,8 @@ export class ScannerService {
     
     console.log(`[DEBUG] fetchMessages returned ${messages.length} messages for topic_id: ${effectiveTopicId}`);
 
-    const deletedTombstones = dbService.getDeletedTombstones();
-    const validMessages = messages.filter((msg: any) => msg && msg.id && !deletedTombstones.has(msg.id));
+    // For fresh scan/enqueue sessions, never drop messages based on old cross-session tombstones
+    const validMessages = messages.filter((msg: any) => msg && msg.id);
 
     validMessages.sort((a: any, b: any) => a.id - b.id);
 
@@ -448,19 +446,34 @@ export class ScannerService {
       size = Number(doc.size || 0);
       mime_type = doc.mimeType || 'application/octet-stream';
 
-      // Check document attributes for filename
+      // Check document attributes for filename and video/audio traits
+      let isVideo = false;
+      let isAudio = false;
       if (doc.attributes) {
         for (const attr of doc.attributes) {
           if (attr.fileName) {
             filename = attr.fileName;
-            break;
+          }
+          if (attr.className === 'DocumentAttributeVideo') {
+            isVideo = true;
+          }
+          if (attr.className === 'DocumentAttributeAudio') {
+            isAudio = true;
           }
         }
       }
 
-      if (mime_type.startsWith('video/')) media_type = 'video';
-      else if (mime_type.startsWith('audio/')) media_type = 'audio';
-      else media_type = 'document';
+      const ext = path.extname(filename).toLowerCase();
+      const isVideoExt = ['.mp4', '.mkv', '.mov', '.avi', '.webm', '.flv', '.wmv', '.m4v'].includes(ext);
+      const isAudioExt = ['.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac', '.wma', '.opus'].includes(ext);
+
+      if (mime_type.startsWith('video/') || isVideo || isVideoExt) {
+        media_type = 'video';
+      } else if (mime_type.startsWith('audio/') || isAudio || isAudioExt) {
+        media_type = 'audio';
+      } else {
+        media_type = 'document';
+      }
 
     } else if (media && media.photo) {
       media_type = 'photo';

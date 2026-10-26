@@ -139,10 +139,8 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
       let from = resetRange ? undefined : (parsedFrom.messageId ?? (fromMsgId ? parseInt(fromMsgId, 10) : undefined));
       let to = resetRange ? undefined : (parsedTo.messageId ?? (toMsgId ? parseInt(toMsgId, 10) : undefined));
 
-      if (parsedFrom.topicId && targetTopicId && parsedFrom.topicId !== targetTopicId) {
+      if (parsedFrom.topicId && parsedTo.topicId && parsedFrom.topicId !== parsedTo.topicId) {
         from = undefined;
-      }
-      if (parsedTo.topicId && targetTopicId && parsedTo.topicId !== targetTopicId) {
         to = undefined;
       }
 
@@ -155,8 +153,8 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
         to = temp;
       }
 
-      const effectiveTargetTopic = targetTopicId ?? parsedFrom.topicId ?? parsedTo.topicId;
-      if (effectiveTargetTopic && activeTopicId === undefined) {
+      const effectiveTargetTopic = parsedFrom.topicId ?? parsedTo.topicId ?? targetTopicId;
+      if (effectiveTargetTopic !== undefined && effectiveTargetTopic !== activeTopicId) {
         setActiveTopicId(effectiveTargetTopic);
       }
 
@@ -170,7 +168,7 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
         setScanProgressText(`Auto-scanning channel history... (${accumulatedItems.length} media files found across ${pageCount * 100} messages)`);
 
         const result: { items: GroupMessageItem[]; hasMore: boolean; oldestMsgId: number | null } =
-          await api.inspectGroupMessages(chat.id, PAGE_SIZE, from, to, currentOffsetId, targetTopicId);
+          await api.inspectGroupMessages(chat.id, PAGE_SIZE, from, to, currentOffsetId, effectiveTargetTopic);
         const { items, hasMore: more, oldestMsgId: oldest } = result;
 
         if (items && items.length > 0) {
@@ -332,17 +330,25 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
       toQueue = temp;
     }
 
+    const effectiveTopicId = (activeTopicId ?? parsedFromQueue.topicId ?? parsedToQueue.topicId) 
+      ? Number(activeTopicId ?? parsedFromQueue.topicId ?? parsedToQueue.topicId) 
+      : undefined;
+
+    const matchedTopic = effectiveTopicId ? forumTopics.find(t => t.id === effectiveTopicId) : undefined;
+    const topicTitle = matchedTopic?.title;
+
     const options: ScanOptions = {
       chat_id: selectedChat.id,
       chat_title: selectedChat.title,
       limit: PAGE_SIZE,
       from_message_id: fromQueue,
       to_message_id: toQueue,
-      topic_id: (activeTopicId ?? parsedFromQueue.topicId ?? parsedToQueue.topicId) ? Number(activeTopicId ?? parsedFromQueue.topicId ?? parsedToQueue.topicId) : undefined,
+      topic_id: effectiveTopicId,
+      topic_title: topicTitle,
       selected_message_ids: Array.from(selectedMsgIds),
       media_types: typeFilter.length > 0 ? typeFilter : undefined,
       destination_path: targetFolder || undefined,
-      session_title: `${selectedChat.title}`
+      session_title: topicTitle ? `${selectedChat.title} - ${topicTitle}` : `${selectedChat.title}`
     };
 
     try {
@@ -678,23 +684,57 @@ export const ChannelExplorer: React.FC<ChannelExplorerProps> = ({ onSessionCreat
             </span>
             <input
               type="text"
-              placeholder="First Msg Link / ID (e.g. 73)"
+              placeholder="First Msg Link / ID (e.g. 72)"
               value={fromMsgId}
-              onChange={e => setFromMsgId(e.target.value)}
+              onChange={e => {
+                const val = e.target.value;
+                setFromMsgId(val);
+                const p = parseTelegramLink(val);
+                if (p.topicId && p.topicId !== activeTopicId) {
+                  setActiveTopicId(p.topicId);
+                }
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const p = parseTelegramLink(fromMsgId);
+                  const eff = p.topicId ?? activeTopicId;
+                  handleGoInsideGroup(selectedChat, eff, false);
+                }
+              }}
               className="input-field"
-              style={{ fontSize: '0.74rem', padding: '4px 10px', width: '180px' }}
+              style={{ fontSize: '0.74rem', padding: '4px 10px', width: '220px' }}
             />
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>→</span>
             <input
               type="text"
-              placeholder="Last Msg Link / ID (e.g. 154)"
+              placeholder="Last Msg Link / ID (e.g. 155)"
               value={toMsgId}
-              onChange={e => setToMsgId(e.target.value)}
+              onChange={e => {
+                const val = e.target.value;
+                setToMsgId(val);
+                const p = parseTelegramLink(val);
+                if (p.topicId && p.topicId !== activeTopicId) {
+                  setActiveTopicId(p.topicId);
+                }
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const p1 = parseTelegramLink(fromMsgId);
+                  const p2 = parseTelegramLink(toMsgId);
+                  const eff = p1.topicId ?? p2.topicId ?? activeTopicId;
+                  handleGoInsideGroup(selectedChat, eff, false);
+                }
+              }}
               className="input-field"
-              style={{ fontSize: '0.74rem', padding: '4px 10px', width: '180px' }}
+              style={{ fontSize: '0.74rem', padding: '4px 10px', width: '220px' }}
             />
             <button
-              onClick={() => handleGoInsideGroup(selectedChat, activeTopicId, false)}
+              onClick={() => {
+                const p1 = parseTelegramLink(fromMsgId);
+                const p2 = parseTelegramLink(toMsgId);
+                const eff = p1.topicId ?? p2.topicId ?? activeTopicId;
+                handleGoInsideGroup(selectedChat, eff, false);
+              }}
               className="btn btn-secondary"
               style={{ padding: '4px 12px', fontSize: '0.73rem', fontWeight: 600, borderColor: '#00d4ff', color: '#00d4ff' }}
             >

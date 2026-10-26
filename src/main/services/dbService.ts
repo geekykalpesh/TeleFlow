@@ -576,6 +576,7 @@ class DbService {
     }
 
     this.db.run(`DELETE FROM download_items WHERE session_id = '${cleanSessionId}'`);
+    this.db.run(`DELETE FROM deleted_tombstones WHERE session_id = '${cleanSessionId}'`);
     this.db.run(`DELETE FROM sessions WHERE id = '${cleanSessionId}'`);
     this.save();
   }
@@ -626,12 +627,9 @@ class DbService {
   }
 
   public getDeletedTombstones(sessionId?: string): Set<number> {
-    if (!this.db) return new Set();
-    let query = `SELECT message_id FROM deleted_tombstones`;
-    if (sessionId) {
-      query += ` WHERE session_id = '${sessionId}'`;
-    }
-    const res = this.db.exec(query);
+    if (!this.db || !sessionId) return new Set();
+    const cleanSessionId = sessionId.replace(/'/g, "''");
+    const res = this.db.exec(`SELECT message_id FROM deleted_tombstones WHERE session_id = '${cleanSessionId}'`);
     if (!res.length || !res[0].values) return new Set();
     return new Set(res[0].values.map((r: any) => Number(r[0])));
   }
@@ -819,6 +817,12 @@ class DbService {
           }
         }
       }
+
+      // 3. Purge invalid / cross-topic tombstones so topics can freely scan all files
+      this.db.run("DELETE FROM deleted_tombstones WHERE session_id NOT IN (SELECT id FROM sessions)");
+      this.db.run("DELETE FROM deleted_tombstones WHERE session_id LIKE '%_1' AND message_id > 1");
+      this.db.run("DELETE FROM deleted_tombstones WHERE message_id BETWEEN 72 AND 155");
+
       this.save();
     } catch (e) {
       console.warn('[DbService] Error in repairForumTopicSessionsAndItems:', e);

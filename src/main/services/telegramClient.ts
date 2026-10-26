@@ -487,17 +487,15 @@ class TelegramClientService {
     const parsedFrom = parseTelegramLink(fromMsgId);
     const parsedTo = parseTelegramLink(toMsgId);
 
-    const effectiveReplyTo = replyTo ?? parsedFrom.topicId ?? parsedTo.topicId;
+    const effectiveReplyTo = parsedFrom.topicId ?? parsedTo.topicId ?? replyTo;
     const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chatId;
     const entity = await this.resolveEntity(effectiveChatId);
 
     let rawFrom = parsedFrom.messageId ?? (typeof fromMsgId === 'number' ? fromMsgId : (fromMsgId ? parseInt(String(fromMsgId), 10) : undefined));
     let rawTo = parsedTo.messageId ?? (typeof toMsgId === 'number' ? toMsgId : (toMsgId ? parseInt(String(toMsgId), 10) : undefined));
 
-    if (parsedFrom.topicId && effectiveReplyTo && parsedFrom.topicId !== effectiveReplyTo) {
+    if (parsedFrom.topicId && parsedTo.topicId && parsedFrom.topicId !== parsedTo.topicId) {
       rawFrom = undefined;
-    }
-    if (parsedTo.topicId && effectiveReplyTo && parsedTo.topicId !== effectiveReplyTo) {
       rawTo = undefined;
     }
 
@@ -537,14 +535,26 @@ class TelegramClientService {
         const doc = media.document;
         size = Number(doc.size || 0);
         mime_type = doc.mimeType || 'application/octet-stream';
+        let isVideo = false;
+        let isAudio = false;
         if (doc.attributes) {
           for (const attr of doc.attributes) {
-            if (attr.fileName) { filename = attr.fileName; break; }
+            if (attr.fileName) { filename = attr.fileName; }
+            if (attr.className === 'DocumentAttributeVideo') { isVideo = true; }
+            if (attr.className === 'DocumentAttributeAudio') { isAudio = true; }
           }
         }
-        if (mime_type.startsWith('video/')) media_type = 'video';
-        else if (mime_type.startsWith('audio/')) media_type = 'audio';
-        else media_type = 'document';
+        const ext = path.extname(filename).toLowerCase();
+        const isVideoExt = ['.mp4', '.mkv', '.mov', '.avi', '.webm', '.flv', '.wmv', '.m4v'].includes(ext);
+        const isAudioExt = ['.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac', '.wma', '.opus'].includes(ext);
+
+        if (mime_type.startsWith('video/') || isVideo || isVideoExt) {
+          media_type = 'video';
+        } else if (mime_type.startsWith('audio/') || isAudio || isAudioExt) {
+          media_type = 'audio';
+        } else {
+          media_type = 'document';
+        }
       } else if (media && media.photo) {
         media_type = 'photo';
         mime_type = 'image/jpeg';
@@ -649,14 +659,12 @@ class TelegramClientService {
     let rawFrom = parsedFrom.messageId ?? (typeof fromId === 'number' ? fromId : (fromId ? parseInt(String(fromId), 10) : undefined));
     let rawTo = parsedTo.messageId ?? (typeof toId === 'number' ? toId : (toId ? parseInt(String(toId), 10) : undefined));
 
-    const effectiveReplyTo = replyTo ?? parsedFrom.topicId ?? parsedTo.topicId;
+    const effectiveReplyTo = parsedFrom.topicId ?? parsedTo.topicId ?? replyTo;
     const effectiveChatId = parsedFrom.chatId || parsedTo.chatId || chatId;
     const entity = await this.resolveEntity(effectiveChatId);
 
-    if (parsedFrom.topicId && effectiveReplyTo && parsedFrom.topicId !== effectiveReplyTo) {
+    if (parsedFrom.topicId && parsedTo.topicId && parsedFrom.topicId !== parsedTo.topicId) {
       rawFrom = undefined;
-    }
-    if (parsedTo.topicId && effectiveReplyTo && parsedTo.topicId !== effectiveReplyTo) {
       rawTo = undefined;
     }
 
